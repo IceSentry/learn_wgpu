@@ -7,7 +7,8 @@ pub struct State {
     queue: wgpu::Queue,
     sc_desc: wgpu::SwapChainDescriptor,
     swap_chain: wgpu::SwapChain,
-    render_pipeline: wgpu::RenderPipeline,
+    render_pipelines: Vec<wgpu::RenderPipeline>,
+    render_pipeline_index: usize,
 
     size: winit::dpi::PhysicalSize<u32>,
     clear_color: wgpu::Color,
@@ -47,14 +48,47 @@ impl State {
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let vs_src = include_str!("shader.vert");
-        let fs_src = include_str!("shader.frag");
+        let render_pipeline = State::init_simple_render_pipeline(
+            &device,
+            &sc_desc,
+            include_str!("shader.vert"),
+            include_str!("shader.frag"),
+        );
 
-        let vs_spirv = glsl_to_spirv::compile(vs_src, glsl_to_spirv::ShaderType::Vertex).unwrap();
-        let fs_spirv = glsl_to_spirv::compile(fs_src, glsl_to_spirv::ShaderType::Fragment).unwrap();
+        let render_pipeline_2 = State::init_simple_render_pipeline(
+            &device,
+            &sc_desc,
+            include_str!("shader2.vert"),
+            include_str!("shader2.frag"),
+        );
 
-        let vs_data = wgpu::read_spirv(vs_spirv).unwrap();
-        let fs_data = wgpu::read_spirv(fs_spirv).unwrap();
+        Self {
+            surface,
+            adapter,
+            device,
+            queue,
+            sc_desc,
+            swap_chain,
+            render_pipelines: vec![render_pipeline, render_pipeline_2],
+            render_pipeline_index: 0,
+            size,
+            clear_color: Default::default(),
+        }
+    }
+
+    fn init_simple_render_pipeline(
+        device: &wgpu::Device,
+        sc_desc: &wgpu::SwapChainDescriptor,
+        vert_shader: &str,
+        frag_shader: &str,
+    ) -> wgpu::RenderPipeline {
+        let vs_spirv = glsl_to_spirv::compile(vert_shader, glsl_to_spirv::ShaderType::Vertex)
+            .expect("failed to compile vertex shader");
+        let fs_spirv = glsl_to_spirv::compile(frag_shader, glsl_to_spirv::ShaderType::Fragment)
+            .expect("failed to compile frag shader");
+
+        let vs_data = wgpu::read_spirv(vs_spirv).expect("failed to read vertex shader");
+        let fs_data = wgpu::read_spirv(fs_spirv).expect("failed to read frag shader");
 
         let vs_module = device.create_shader_module(&vs_data);
         let fs_module = device.create_shader_module(&fs_data);
@@ -64,7 +98,7 @@ impl State {
                 bind_group_layouts: &[],
             });
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &render_pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
@@ -96,19 +130,7 @@ impl State {
             sample_count: 1,
             sample_mask: !0,
             alpha_to_coverage_enabled: false,
-        });
-
-        Self {
-            surface,
-            adapter,
-            device,
-            queue,
-            sc_desc,
-            swap_chain,
-            render_pipeline,
-            size,
-            clear_color: Default::default(),
-        }
+        })
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -136,6 +158,20 @@ impl State {
                     g: 1.0 - dist_to_center_normalized,
                     b: 0.0,
                     a: 1.0,
+                }
+            }
+            WindowEvent::KeyboardInput { input, .. } => {
+                if let KeyboardInput {
+                    state: ElementState::Pressed,
+                    virtual_keycode: Some(VirtualKeyCode::Space),
+                    ..
+                } = input
+                {
+                    self.render_pipeline_index = match self.render_pipeline_index {
+                        0 => 1,
+                        1 => 0,
+                        _ => 0,
+                    }
                 }
             }
             _ => return false,
@@ -169,7 +205,7 @@ impl State {
                 depth_stencil_attachment: None,
             });
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_pipeline(&self.render_pipelines[self.render_pipeline_index]);
             render_pass.draw(0..3, 0..1);
         }
 
