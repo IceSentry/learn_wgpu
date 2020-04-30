@@ -1,10 +1,10 @@
 mod state;
 
 use futures::executor::block_on;
-use imgui::{im_str, Condition, Context, FontSource};
+use imgui::{im_str, Condition, Context, FontSource, Ui};
 use imgui_wgpu::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use winit::event::{Event, WindowEvent};
 use winit::{
     event::*,
@@ -14,17 +14,12 @@ use winit::{
 
 use state::State;
 
-fn main() {
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_title("learn_wgpu")
-        .build(&event_loop)
-        .unwrap();
-
-    let mut state = block_on(State::new(&window));
-    // let mut imgui_state = ImguiState::new(&window, &mut state);
-
+fn init_imgui(
+    window: &winit::window::Window,
+    state: &mut State,
+) -> (Context, WinitPlatform, Renderer) {
     let mut imgui = Context::create();
+
     let mut platform = WinitPlatform::init(&mut imgui);
     platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Default);
 
@@ -40,24 +35,58 @@ fn main() {
         }),
     }]);
 
-    let clear_color = wgpu::Color::default();
-
-    let mut renderer = Renderer::new(
+    let renderer = Renderer::new(
         &mut imgui,
         &state.device,
         &mut state.queue,
         state.sc_desc.format,
-        Some(clear_color),
+        Some(wgpu::Color::default()),
     );
 
+    (imgui, platform, renderer)
+}
+
+fn build_ui(ui: &Ui, delta_t: Duration) {
+    imgui::Window::new(im_str!("Hello world"))
+        .size([300.0, 100.0], Condition::FirstUseEver)
+        .build(ui, || {
+            ui.text(im_str!("Hello world!"));
+            ui.text(im_str!("This is imgui-rs on WGPU!"));
+            ui.separator();
+            let mouse_pos = ui.io().mouse_pos;
+            ui.text(im_str!(
+                "Mouse Position: ({:.1},{:.1})",
+                mouse_pos[0],
+                mouse_pos[1]
+            ));
+        });
+
+    imgui::Window::new(im_str!("Hello too"))
+        .size([200.0, 50.0], Condition::FirstUseEver)
+        .position([400.0, 200.0], Condition::FirstUseEver)
+        .build(&ui, || {
+            ui.text(im_str!("Frametime: {:?}", delta_t));
+        });
+}
+
+fn main() {
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_title("learn_wgpu")
+        .build(&event_loop)
+        .unwrap();
+
+    let mut state = block_on(State::new(&window));
+
+    let (mut imgui, mut platform, mut renderer) = init_imgui(&window, &mut state);
+
     let mut last_frame = Instant::now();
+    let mut last_cursor = None;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
-            Event::NewEvents(_) => {
-                last_frame = imgui.io_mut().update_delta_time(last_frame);
-            }
+            Event::NewEvents(_) => {}
             Event::WindowEvent {
                 ref event,
                 window_id,
@@ -90,8 +119,8 @@ fn main() {
                 state.render();
             }
             Event::RedrawEventsCleared => {
-                let ui = imgui.frame();
-                let delta_s = state.last_frame.elapsed();
+                let delta_t = last_frame.elapsed();
+                last_frame = imgui.io_mut().update_delta_time(last_frame);
 
                 let frame = match state.swap_chain.get_next_texture() {
                     Ok(frame) => frame,
@@ -101,32 +130,19 @@ fn main() {
                     }
                 };
 
-                {
-                    imgui::Window::new(im_str!("Hello world"))
-                        .size([300.0, 100.0], Condition::FirstUseEver)
-                        .build(&ui, || {
-                            ui.text(im_str!("Hello world!"));
-                            ui.text(im_str!("This is imgui-rs on WGPU!"));
-                            ui.separator();
-                            let mouse_pos = ui.io().mouse_pos;
-                            ui.text(im_str!(
-                                "Mouse Position: ({:.1},{:.1})",
-                                mouse_pos[0],
-                                mouse_pos[1]
-                            ));
-                        });
+                let ui = imgui.frame();
 
-                    imgui::Window::new(im_str!("Hello too"))
-                        .size([200.0, 50.0], Condition::FirstUseEver)
-                        .position([400.0, 200.0], Condition::FirstUseEver)
-                        .build(&ui, || {
-                            ui.text(im_str!("Frametime: {:?}", delta_s));
-                        });
-                }
+                build_ui(&ui, delta_t);
 
+                // Render UI
                 let mut encoder: wgpu::CommandEncoder = state
                     .device
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+                if last_cursor != Some(ui.mouse_cursor()) {
+                    last_cursor = Some(ui.mouse_cursor());
+                    platform.prepare_render(&ui, &window);
+                }
 
                 platform.prepare_render(&ui, &window);
                 renderer
