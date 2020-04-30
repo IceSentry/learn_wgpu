@@ -1,6 +1,75 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use wgpu_glyph::{GlyphBrushBuilder, Section};
 use winit::{event::*, window::Window};
+
+use imgui::{im_str, Condition, Context, FontSource, Ui};
+use imgui_wgpu::Renderer;
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
+
+pub struct ImguiState {
+    pub context: Context,
+    pub platform: WinitPlatform,
+}
+
+impl ImguiState {
+    pub fn new(window: &winit::window::Window, scale_factor: f64) -> Self {
+        let mut imgui = Context::create();
+
+        let mut platform = WinitPlatform::init(&mut imgui);
+        platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Default);
+        imgui.set_ini_filename(None);
+
+        let font_size = (13.0 * scale_factor) as f32;
+        imgui.io_mut().font_global_scale = (1.0 / scale_factor) as f32;
+
+        imgui.fonts().add_font(&[FontSource::DefaultFontData {
+            config: Some(imgui::FontConfig {
+                oversample_h: 1,
+                pixel_snap_h: true,
+                size_pixels: font_size,
+                ..Default::default()
+            }),
+        }]);
+
+        Self {
+            context: imgui,
+            platform,
+        }
+    }
+
+    pub fn prepare(&mut self, window: &winit::window::Window, delta_t: Duration) -> Ui {
+        self.platform
+            .prepare_frame(self.context.io_mut(), &window)
+            .expect("Failed to prepare frame");
+        let ui = self.context.frame();
+
+        {
+            imgui::Window::new(im_str!("Hello world"))
+                .size([300.0, 100.0], Condition::FirstUseEver)
+                .build(&ui, || {
+                    ui.text(im_str!("Hello world!"));
+                    ui.text(im_str!("This is imgui-rs on WGPU!"));
+                    ui.separator();
+                    let mouse_pos = ui.io().mouse_pos;
+                    ui.text(im_str!(
+                        "Mouse Position: ({:.1},{:.1})",
+                        mouse_pos[0],
+                        mouse_pos[1]
+                    ));
+                });
+
+            imgui::Window::new(im_str!("Hello too"))
+                .size([200.0, 50.0], Condition::FirstUseEver)
+                .position([400.0, 200.0], Condition::FirstUseEver)
+                .build(&ui, || {
+                    ui.text(im_str!("Frametime: {:?}", delta_t));
+                });
+        }
+
+        self.platform.prepare_render(&ui, &window);
+        ui
+    }
+}
 
 pub struct State {
     pub surface: wgpu::Surface,
@@ -16,11 +85,11 @@ pub struct State {
     pub scale_factor: f64,
     pub clear_color: wgpu::Color,
     pub last_frame: Instant,
-    pub demo_open: bool,
+    pub imgui_renderer: imgui_wgpu::Renderer,
 }
 
 impl State {
-    pub async fn new(window: &Window) -> Self {
+    pub async fn new(window: &Window, imgui_context: &mut imgui::Context) -> Self {
         let size = window.inner_size();
         let surface = wgpu::Surface::create(window);
         let adapter = wgpu::Adapter::request(
@@ -33,7 +102,7 @@ impl State {
         .await
         .expect("Failed to request adapter");
 
-        let (device, queue) = adapter
+        let (device, mut queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 extensions: wgpu::Extensions {
                     anisotropic_filtering: false,
@@ -71,6 +140,9 @@ impl State {
         let clear_color = wgpu::Color::default();
         let scale_factor = 1.0;
 
+        let imgui_renderer =
+            Renderer::new(imgui_context, &device, &mut queue, sc_desc.format, None);
+
         Self {
             surface,
             adapter,
@@ -84,8 +156,8 @@ impl State {
             scale_factor,
             clear_color,
             last_frame: Instant::now(),
-            demo_open: true,
             render_format,
+            imgui_renderer,
         }
     }
 
@@ -188,16 +260,16 @@ impl State {
         true
     }
 
-    pub fn update(&mut self) {}
+    pub fn update(&mut self, _delta_t: Duration) {}
 
-    pub fn render(&mut self) {
-        let delta_t = self.last_frame.elapsed();
-        self.last_frame = Instant::now();
-
-        let frame = self
-            .swap_chain
-            .get_next_texture()
-            .expect("Failed to get texture");
+    pub fn render(&mut self, ui: imgui::Ui, delta_t: Duration) {
+        let frame = match self.swap_chain.get_next_texture() {
+            Ok(frame) => frame,
+            Err(e) => {
+                eprintln!("dropped frame: {:?}", e);
+                return;
+            }
+        };
 
         let mut encoder = self
             .device
@@ -221,16 +293,25 @@ impl State {
             render_pass.draw(0..3, 0..1);
         }
 
+        self.render_text(&mut encoder, &frame, delta_t);
+
+        self.imgui_renderer
+            .render(ui.render(), &self.device, &mut encoder, &frame.view)
+            .expect("Imgui rendering failed");
+
+        self.queue.submit(&[encoder.finish()]);
+    }
+
+    fn render_text(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        frame: &wgpu::SwapChainOutput,
+        delta_t: Duration,
+    ) {
         let font: &[u8] = include_bytes!("Inconsolata-Regular.ttf");
         let mut glyph_brush = GlyphBrushBuilder::using_font_bytes(font)
             .expect("Load font")
             .build(&self.device, self.render_format);
-
-        glyph_brush.queue(Section {
-            text: "Hello wgpu_glyph",
-            screen_position: (0.0, 0.0),
-            ..Section::default()
-        });
 
         glyph_brush.queue(Section {
             text: &format!("Frametime: {:?}", delta_t),
@@ -241,13 +322,11 @@ impl State {
         glyph_brush
             .draw_queued(
                 &self.device,
-                &mut encoder,
+                encoder,
                 &frame.view,
                 self.size.width,
                 self.size.height,
             )
             .expect("Draw queued");
-
-        self.queue.submit(&[encoder.finish()]);
     }
 }
