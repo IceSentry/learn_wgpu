@@ -190,7 +190,7 @@ impl State {
 
     pub fn update(&mut self) {}
 
-    pub fn render(&mut self, window: &winit::window::Window) {
+    pub fn render(&mut self) {
         let delta_t = self.last_frame.elapsed();
         self.last_frame = Instant::now();
 
