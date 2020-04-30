@@ -15,6 +15,7 @@ wgpu_glyph = '0.8.0'
 serde = '1.0.106'
 serde_derive = '1.0.106'
 toml = '0.5.6'
+bytemuck = '1.2.0'
 
 [dependencies.imgui-wgpu]
 git = 'https://github.com/Yatekii/imgui-wgpu-rs'

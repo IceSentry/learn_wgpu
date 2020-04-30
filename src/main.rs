@@ -57,15 +57,14 @@ fn main() {
                 }
                 | WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                 WindowEvent::Resized(physical_size) => {
-                    renderer.resize(*physical_size);
+                    renderer.resize(*physical_size, None);
                 }
                 WindowEvent::ScaleFactorChanged {
                     new_inner_size,
                     scale_factor,
                     ..
                 } => {
-                    renderer.scale_factor = *scale_factor;
-                    renderer.resize(**new_inner_size);
+                    renderer.resize(**new_inner_size, Some(*scale_factor));
                 }
                 _ => {}
             },

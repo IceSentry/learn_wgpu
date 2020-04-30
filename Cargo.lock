@@ -868,6 +868,7 @@ checksum = "b294d6fa9ee409a054354afc4352b0b9ef7ca222c69b8812cbea9e7d2bf3783f"
 name = "learn_wgpu"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "futures",
  "glsl-to-spirv",
  "image",
