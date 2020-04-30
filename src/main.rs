@@ -79,6 +79,7 @@ fn main() {
 
                 let ui = imgui_state.prepare(&window, delta_t);
                 renderer.render(ui, delta_t, &config);
+                renderer.last_frame_duration = delta_t;
             }
             _ => {}
         }

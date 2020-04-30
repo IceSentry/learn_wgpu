@@ -129,13 +129,13 @@ pub struct Renderer {
     pub queue: wgpu::Queue,
     pub sc_desc: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
-    pub render_pipelines: Vec<wgpu::RenderPipeline>,
-    pub render_pipeline_index: usize,
+    pub render_pipeline: wgpu::RenderPipeline,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub render_format: wgpu::TextureFormat,
     pub scale_factor: f64,
     pub clear_color: wgpu::Color,
     pub last_frame: Instant,
+    pub last_frame_duration: Duration,
     pub imgui_renderer: imgui_wgpu::Renderer,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -177,31 +177,109 @@ impl Renderer {
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let render_pipeline = Renderer::init_simple_render_pipeline(
-            &device,
-            &sc_desc,
-            include_str!("shader.vert"),
-            include_str!("shader.frag"),
-        );
+        // load texture
+        {
+            let diffuse_bytes = include_bytes!("assets/happy-tree.png");
+            let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
+            let diffuse_rgba = diffuse_image.as_rgba8().unwrap();
 
-        let render_pipeline_2 = Renderer::init_simple_render_pipeline(
-            &device,
-            &sc_desc,
-            include_str!("shader2.vert"),
-            include_str!("shader2.frag"),
-        );
+            use image::GenericImageView;
+            let dimensions = diffuse_image.dimensions();
 
-        let clear_color = wgpu::Color::default();
-        let scale_factor = 1.0;
+            let size = wgpu::Extent3d {
+                width: dimensions.0,
+                height: dimensions.1,
+                depth: 1,
+            };
+            let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("happy-tree"),
+                // All textures are stored as 3d, we represent our 2d texture
+                // by setting depth to 1.
+                size: wgpu::Extent3d {
+                    width: dimensions.0,
+                    height: dimensions.1,
+                    depth: 1,
+                },
+                array_layer_count: 1,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                // SAMPLED tells wgpu that we want to use this texture in shaders
+                // COPY_DST means that we want to copy data to this texture
+                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            });
+
+            let buffer = device.create_buffer_with_data(&diffuse_rgba, wgpu::BufferUsage::COPY_SRC);
+        }
+
+        let render_pipeline = {
+            let vert_shader = include_str!("shader.vert");
+            let frag_shader = include_str!("shader.frag");
+
+            let vs_spirv = glsl_to_spirv::compile(vert_shader, glsl_to_spirv::ShaderType::Vertex)
+                .expect("failed to compile vertex shader");
+            let fs_spirv = glsl_to_spirv::compile(frag_shader, glsl_to_spirv::ShaderType::Fragment)
+                .expect("failed to compile frag shader");
+
+            let vs_data = wgpu::read_spirv(vs_spirv).expect("failed to read vertex shader");
+            let fs_data = wgpu::read_spirv(fs_spirv).expect("failed to read frag shader");
+
+            let vs_module = device.create_shader_module(&vs_data);
+            let fs_module = device.create_shader_module(&fs_data);
+
+            let render_pipeline_layout =
+                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    bind_group_layouts: &[],
+                });
+
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                layout: &render_pipeline_layout,
+                vertex_stage: wgpu::ProgrammableStageDescriptor {
+                    module: &vs_module,
+                    entry_point: "main",
+                },
+                fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                    module: &fs_module,
+                    entry_point: "main",
+                }),
+                rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: wgpu::CullMode::Back,
+                    depth_bias: 0,
+                    depth_bias_slope_scale: 0.0,
+                    depth_bias_clamp: 0.0,
+                }),
+                color_states: &[wgpu::ColorStateDescriptor {
+                    format: sc_desc.format,
+                    color_blend: wgpu::BlendDescriptor::REPLACE,
+                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
+                primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+                depth_stencil_state: None,
+                vertex_state: wgpu::VertexStateDescriptor {
+                    index_format: wgpu::IndexFormat::Uint16,
+                    vertex_buffers: &[Vertex::desc()],
+                },
+                sample_count: 1,
+                sample_mask: !0,
+                alpha_to_coverage_enabled: false,
+            })
+        };
 
         let imgui_renderer =
             imgui_wgpu::Renderer::new(imgui_context, &device, &mut queue, sc_desc.format, None);
 
+        // Setup buffers
         let vertex_buffer = device
             .create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX);
-
         let index_buffer =
             device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX);
+
+        let clear_color = wgpu::Color::default();
+        let scale_factor = 1.0;
+
         Self {
             surface,
             adapter,
@@ -209,75 +287,18 @@ impl Renderer {
             queue,
             sc_desc,
             swap_chain,
-            render_pipelines: vec![render_pipeline, render_pipeline_2],
-            render_pipeline_index: 0,
+            render_pipeline,
             size,
             scale_factor,
             clear_color,
             last_frame: Instant::now(),
+            last_frame_duration: Instant::now().elapsed(),
             render_format,
             imgui_renderer,
             vertex_buffer,
             index_buffer,
             num_indices: INDICES.len() as u32,
         }
-    }
-
-    fn init_simple_render_pipeline(
-        device: &wgpu::Device,
-        sc_desc: &wgpu::SwapChainDescriptor,
-        vert_shader: &str,
-        frag_shader: &str,
-    ) -> wgpu::RenderPipeline {
-        let vs_spirv = glsl_to_spirv::compile(vert_shader, glsl_to_spirv::ShaderType::Vertex)
-            .expect("failed to compile vertex shader");
-        let fs_spirv = glsl_to_spirv::compile(frag_shader, glsl_to_spirv::ShaderType::Fragment)
-            .expect("failed to compile frag shader");
-
-        let vs_data = wgpu::read_spirv(vs_spirv).expect("failed to read vertex shader");
-        let fs_data = wgpu::read_spirv(fs_spirv).expect("failed to read frag shader");
-
-        let vs_module = device.create_shader_module(&vs_data);
-        let fs_module = device.create_shader_module(&fs_data);
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                bind_group_layouts: &[],
-            });
-
-        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &render_pipeline_layout,
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &vs_module,
-                entry_point: "main",
-            },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &fs_module,
-                entry_point: "main",
-            }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: wgpu::CullMode::Back,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
-            }),
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: sc_desc.format,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            depth_stencil_state: None,
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[Vertex::desc()],
-            },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
-        })
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: Option<f64>) {
@@ -317,14 +338,14 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            render_pass.set_pipeline(&self.render_pipelines[self.render_pipeline_index]);
+            render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(0, &self.vertex_buffer, 0, 0);
             render_pass.set_index_buffer(&self.index_buffer, 0, 0);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
         if config.debug.glyph {
-            self.render_text(&mut encoder, &frame, delta_t);
+            self.render_debug_text(&mut encoder, &frame, delta_t);
         }
 
         if config.debug.imgui {
@@ -336,7 +357,7 @@ impl Renderer {
         self.queue.submit(&[encoder.finish()]);
     }
 
-    fn render_text(
+    fn render_debug_text(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         frame: &wgpu::SwapChainOutput,
@@ -349,6 +370,15 @@ impl Renderer {
 
         glyph_brush.queue(Section {
             text: &format!("{:?}", delta_t),
+            ..Section::default()
+        });
+
+        let curr_fps = 1.0 / delta_t.as_secs_f64();
+        let last_fps = 1.0 / self.last_frame_duration.as_secs_f64();
+
+        glyph_brush.queue(Section {
+            text: &format!("{:.0}fps", last_fps * 0.9 + curr_fps * 0.1),
+            screen_position: (0.0, 20.0),
             ..Section::default()
         });
 

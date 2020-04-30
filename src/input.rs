@@ -27,11 +27,7 @@ pub fn handle_input(event: &WindowEvent, renderer: &mut Renderer) -> bool {
             {
                 return match virtual_keycode {
                     Some(VirtualKeyCode::Space) => {
-                        renderer.render_pipeline_index = match renderer.render_pipeline_index {
-                            0 => 1,
-                            1 => 0,
-                            _ => 0,
-                        };
+                        println!("space");
                         true
                     }
                     _ => false,
