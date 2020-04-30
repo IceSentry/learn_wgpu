@@ -1,6 +1,8 @@
-mod state;
+mod input;
+mod renderer;
 
 use futures::executor::block_on;
+use serde_derive::Deserialize;
 use std::time::Instant;
 use winit::event::{Event, WindowEvent};
 use winit::{
@@ -9,8 +11,24 @@ use winit::{
     window::WindowBuilder,
 };
 
-use state::{ImguiState, State};
+use input::handle_input;
+use renderer::{ImguiState, Renderer};
+
+#[derive(Deserialize)]
+pub struct Config {
+    debug: DebugKeys,
+}
+
+#[derive(Deserialize)]
+pub struct DebugKeys {
+    imgui: bool,
+    glyph: bool,
+}
+
 fn main() {
+    let config: Config =
+        toml::from_str(include_str!("Config.toml")).expect("failed to parse config.toml");
+
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("learn_wgpu")
@@ -18,7 +36,7 @@ fn main() {
         .unwrap();
 
     let mut imgui_state = ImguiState::new(&window, 1.0);
-    let mut state = block_on(State::new(&window, &mut imgui_state.context));
+    let mut renderer = block_on(Renderer::new(&window, &mut imgui_state.context));
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -27,7 +45,7 @@ fn main() {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == window.id() && !state.input(event) => match event {
+            } if window_id == window.id() && !handle_input(event, &mut renderer) => match event {
                 WindowEvent::KeyboardInput {
                     input:
                         KeyboardInput {
@@ -39,15 +57,15 @@ fn main() {
                 }
                 | WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                 WindowEvent::Resized(physical_size) => {
-                    state.resize(*physical_size);
+                    renderer.resize(*physical_size);
                 }
                 WindowEvent::ScaleFactorChanged {
                     new_inner_size,
                     scale_factor,
                     ..
                 } => {
-                    state.scale_factor = *scale_factor;
-                    state.resize(**new_inner_size);
+                    renderer.scale_factor = *scale_factor;
+                    renderer.resize(**new_inner_size);
                 }
                 _ => {}
             },
@@ -55,13 +73,13 @@ fn main() {
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {
-                let delta_t = state.last_frame.elapsed();
-                state.last_frame = Instant::now();
+                let delta_t = renderer.last_frame.elapsed();
+                renderer.last_frame = Instant::now();
 
-                state.update(delta_t); // game loop
+                // update(delta_t)
 
                 let ui = imgui_state.prepare(&window, delta_t);
-                state.render(ui, delta_t);
+                renderer.render(ui, delta_t, &config);
             }
             _ => {}
         }

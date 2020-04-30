@@ -1,9 +1,9 @@
 use std::time::{Duration, Instant};
 use wgpu_glyph::{GlyphBrushBuilder, Section};
-use winit::{event::*, window::Window};
+use winit::window::Window;
 
+use crate::Config;
 use imgui::{im_str, Condition, Context, FontSource, Ui};
-use imgui_wgpu::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 
 pub struct ImguiState {
@@ -45,9 +45,10 @@ impl ImguiState {
 
         {
             imgui::Window::new(im_str!("Debug info"))
-                .size([300.0, 100.0], Condition::FirstUseEver)
+                // .size([width, 100.0], Condition::FirstUseEver)
+                .position([0.0, 0.0], Condition::FirstUseEver)
                 .build(&ui, || {
-                    ui.text(im_str!("imgui_wgpu"));
+                    ui.text(im_str!("Frametime: {:?}", delta_t));
                     ui.separator();
                     let mouse_pos = ui.io().mouse_pos;
                     ui.text(im_str!(
@@ -55,8 +56,6 @@ impl ImguiState {
                         mouse_pos[0],
                         mouse_pos[1]
                     ));
-                    ui.separator();
-                    ui.text(im_str!("Frametime: {:?}", delta_t));
                 });
         }
 
@@ -65,7 +64,7 @@ impl ImguiState {
     }
 }
 
-pub struct State {
+pub struct Renderer {
     pub surface: wgpu::Surface,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
@@ -82,7 +81,7 @@ pub struct State {
     pub imgui_renderer: imgui_wgpu::Renderer,
 }
 
-impl State {
+impl Renderer {
     pub async fn new(window: &Window, imgui_context: &mut imgui::Context) -> Self {
         let size = window.inner_size();
         let surface = wgpu::Surface::create(window);
@@ -117,14 +116,14 @@ impl State {
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let render_pipeline = State::init_simple_render_pipeline(
+        let render_pipeline = Renderer::init_simple_render_pipeline(
             &device,
             &sc_desc,
             include_str!("shader.vert"),
             include_str!("shader.frag"),
         );
 
-        let render_pipeline_2 = State::init_simple_render_pipeline(
+        let render_pipeline_2 = Renderer::init_simple_render_pipeline(
             &device,
             &sc_desc,
             include_str!("shader2.vert"),
@@ -135,7 +134,7 @@ impl State {
         let scale_factor = 1.0;
 
         let imgui_renderer =
-            Renderer::new(imgui_context, &device, &mut queue, sc_desc.format, None);
+            imgui_wgpu::Renderer::new(imgui_context, &device, &mut queue, sc_desc.format, None);
 
         Self {
             surface,
@@ -219,44 +218,7 @@ impl State {
         self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        match event {
-            WindowEvent::CursorMoved { position, .. } => {
-                let center_w = (self.size.width / 2) as f64;
-                let center_h = (self.size.height / 2) as f64;
-                let max_dist_to_center = (center_w.powi(2) + center_h.powi(2)).sqrt();
-                let dist_to_center_normalized =
-                    ((center_w - position.x).powi(2) + (center_h - position.y).powi(2)).sqrt()
-                        / max_dist_to_center;
-                self.clear_color = wgpu::Color {
-                    r: dist_to_center_normalized,
-                    g: 1.0 - dist_to_center_normalized,
-                    b: 0.0,
-                    a: 1.0,
-                }
-            }
-            WindowEvent::KeyboardInput { input, .. } => {
-                if let KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Space),
-                    ..
-                } = input
-                {
-                    self.render_pipeline_index = match self.render_pipeline_index {
-                        0 => 1,
-                        1 => 0,
-                        _ => 0,
-                    }
-                }
-            }
-            _ => return false,
-        }
-        true
-    }
-
-    pub fn update(&mut self, _delta_t: Duration) {}
-
-    pub fn render(&mut self, ui: imgui::Ui, delta_t: Duration) {
+    pub fn render(&mut self, ui: imgui::Ui, delta_t: Duration, config: &Config) {
         let frame = match self.swap_chain.get_next_texture() {
             Ok(frame) => frame,
             Err(e) => {
@@ -287,11 +249,15 @@ impl State {
             render_pass.draw(0..3, 0..1);
         }
 
-        self.render_text(&mut encoder, &frame, delta_t);
+        if config.debug.glyph {
+            self.render_text(&mut encoder, &frame, delta_t);
+        }
 
-        self.imgui_renderer
-            .render(ui.render(), &self.device, &mut encoder, &frame.view)
-            .expect("Imgui rendering failed");
+        if config.debug.imgui {
+            self.imgui_renderer
+                .render(ui.render(), &self.device, &mut encoder, &frame.view)
+                .expect("Imgui rendering failed");
+        }
 
         self.queue.submit(&[encoder.finish()]);
     }
@@ -302,7 +268,7 @@ impl State {
         frame: &wgpu::SwapChainOutput,
         delta_t: Duration,
     ) {
-        let font: &[u8] = include_bytes!("Inconsolata-Regular.ttf");
+        let font: &[u8] = include_bytes!("assets/Inconsolata-Regular.ttf");
         let mut glyph_brush = GlyphBrushBuilder::using_font_bytes(font)
             .expect("Load font")
             .build(&self.device, self.render_format);
