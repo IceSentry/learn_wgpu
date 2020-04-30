@@ -87,7 +87,7 @@ fn main() {
             },
             Event::RedrawRequested(_) => {
                 state.update();
-                state.render(&window);
+                state.render();
             }
             Event::RedrawEventsCleared => {
                 let ui = imgui.frame();
