@@ -1,17 +1,22 @@
+use std::time::Instant;
+use wgpu_glyph::{GlyphBrushBuilder, Section};
 use winit::{event::*, window::Window};
 
 pub struct State {
-    surface: wgpu::Surface,
-    adapter: wgpu::Adapter,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    sc_desc: wgpu::SwapChainDescriptor,
-    swap_chain: wgpu::SwapChain,
-    render_pipelines: Vec<wgpu::RenderPipeline>,
-    render_pipeline_index: usize,
-
-    size: winit::dpi::PhysicalSize<u32>,
-    clear_color: wgpu::Color,
+    pub surface: wgpu::Surface,
+    pub adapter: wgpu::Adapter,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub sc_desc: wgpu::SwapChainDescriptor,
+    pub swap_chain: wgpu::SwapChain,
+    pub render_pipelines: Vec<wgpu::RenderPipeline>,
+    pub render_pipeline_index: usize,
+    pub size: winit::dpi::PhysicalSize<u32>,
+    pub render_format: wgpu::TextureFormat,
+    pub scale_factor: f64,
+    pub clear_color: wgpu::Color,
+    pub last_frame: Instant,
+    pub demo_open: bool,
 }
 
 impl State {
@@ -20,7 +25,7 @@ impl State {
         let surface = wgpu::Surface::create(window);
         let adapter = wgpu::Adapter::request(
             &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::Default,
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
             },
             wgpu::BackendBit::PRIMARY, // Vulakn + Metal + DX12 + WebGPU
@@ -37,14 +42,15 @@ impl State {
             })
             .await;
 
+        let render_format = wgpu::TextureFormat::Bgra8UnormSrgb;
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
             // We use wgpu::TextureFormat::Bgra8UnormSrgb because that's the format
             // that's guaranteed to be natively supported by the swapchains of all the APIs/platforms
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            format: render_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: wgpu::PresentMode::Mailbox,
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
@@ -62,6 +68,9 @@ impl State {
             include_str!("shader2.frag"),
         );
 
+        let clear_color = wgpu::Color::default();
+        let scale_factor = 1.0;
+
         Self {
             surface,
             adapter,
@@ -72,7 +81,11 @@ impl State {
             render_pipelines: vec![render_pipeline, render_pipeline_2],
             render_pipeline_index: 0,
             size,
-            clear_color: Default::default(),
+            scale_factor,
+            clear_color,
+            last_frame: Instant::now(),
+            demo_open: true,
+            render_format,
         }
     }
 
@@ -142,11 +155,7 @@ impl State {
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
-            WindowEvent::CursorMoved {
-                device_id: _,
-                position,
-                ..
-            } => {
+            WindowEvent::CursorMoved { position, .. } => {
                 let center_w = (self.size.width / 2) as f64;
                 let center_h = (self.size.height / 2) as f64;
                 let max_dist_to_center = (center_w.powi(2) + center_h.powi(2)).sqrt();
@@ -181,7 +190,10 @@ impl State {
 
     pub fn update(&mut self) {}
 
-    pub fn render(&mut self) {
+    pub fn render(&mut self, window: &winit::window::Window) {
+        let delta_t = self.last_frame.elapsed();
+        self.last_frame = Instant::now();
+
         let frame = self
             .swap_chain
             .get_next_texture()
@@ -208,6 +220,33 @@ impl State {
             render_pass.set_pipeline(&self.render_pipelines[self.render_pipeline_index]);
             render_pass.draw(0..3, 0..1);
         }
+
+        let font: &[u8] = include_bytes!("Inconsolata-Regular.ttf");
+        let mut glyph_brush = GlyphBrushBuilder::using_font_bytes(font)
+            .expect("Load font")
+            .build(&self.device, self.render_format);
+
+        glyph_brush.queue(Section {
+            text: "Hello wgpu_glyph",
+            screen_position: (0.0, 0.0),
+            ..Section::default()
+        });
+
+        glyph_brush.queue(Section {
+            text: &format!("Frametime: {:?}", delta_t),
+            screen_position: (0.0, 20.0),
+            ..Section::default()
+        });
+
+        glyph_brush
+            .draw_queued(
+                &self.device,
+                &mut encoder,
+                &frame.view,
+                self.size.width,
+                self.size.height,
+            )
+            .expect("Draw queued");
 
         self.queue.submit(&[encoder.finish()]);
     }

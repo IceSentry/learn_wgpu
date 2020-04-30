@@ -698,6 +698,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyph_brush"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fca6f9d679bff1322c76c9a1ad4b8553b30a94f3f75bea6936e19032c2f2ec3"
+dependencies = [
+ "glyph_brush_layout",
+ "log",
+ "ordered-float",
+ "rustc-hash",
+ "rusttype 0.8.3",
+ "twox-hash",
+]
+
+[[package]]
+name = "glyph_brush_layout"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b70adc570f1dc71b6b32e241cbcc2b42175f5aea71951fbf41e68b04aec24c7"
+dependencies = [
+ "approx",
+ "rusttype 0.8.3",
+ "xi-unicode",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -731,6 +756,47 @@ dependencies = [
  "png",
  "scoped_threadpool",
  "tiff",
+]
+
+[[package]]
+name = "imgui"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a2d28cee2982d4dab4dd954c23be339ab1f98be4ff5a13ecd8fbfb47cdfa23a"
+dependencies = [
+ "bitflags",
+ "imgui-sys",
+ "lazy_static",
+ "parking_lot",
+]
+
+[[package]]
+name = "imgui-sys"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21a8693e0f66ecd2ec10e2f0ed4dc4519071495f350e6d8ddaf3e70351229257"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "imgui-wgpu"
+version = "0.6.0"
+source = "git+https://github.com/Yatekii/imgui-wgpu-rs#ba3df8d42d4c60037e1d8a2eb14a2eae05df13d2"
+dependencies = [
+ "imgui",
+ "log",
+ "wgpu",
+]
+
+[[package]]
+name = "imgui-winit-support"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a90f2e2a24b82dbd7aa9eb20825cd6421af5d40643d329d8e7bb1ae37a962ffe"
+dependencies = [
+ "imgui",
+ "winit",
 ]
 
 [[package]]
@@ -805,7 +871,11 @@ dependencies = [
  "futures",
  "glsl-to-spirv",
  "image",
+ "imgui",
+ "imgui-wgpu",
+ "imgui-winit-support",
  "wgpu",
+ "wgpu_glyph",
  "winit",
 ]
 
@@ -833,6 +903,12 @@ checksum = "5cc7ad3d82c845bdb5dde34ffdcc7a5fb4d2996e1e1ee0f19c33bc80e15196b9"
 dependencies = [
  "num-traits",
 ]
+
+[[package]]
+name = "linked-hash-map"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae91b68aebc4ddb91978b11a1b02ddd8602a05ec19002801c5666000e05e0f83"
 
 [[package]]
 name = "lock_api"
@@ -1294,6 +1370,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+
+[[package]]
 name = "rusttype"
 version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1309,7 +1391,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f61411055101f7b60ecf1041d87fb74205fb20b0c7a723f07ef39174cf6b4c0"
 dependencies = [
  "approx",
+ "crossbeam-deque",
+ "crossbeam-utils",
+ "linked-hash-map",
+ "num_cpus",
  "ordered-float",
+ "rustc-hash",
  "stb_truetype",
 ]
 
@@ -1449,6 +1536,15 @@ dependencies = [
  "byteorder",
  "lzw",
  "miniz_oxide",
+]
+
+[[package]]
+name = "twox-hash"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bfd5b7557925ce778ff9b9ef90e3ade34c524b5ff10e239c69a42d546d2af56"
+dependencies = [
+ "rand",
 ]
 
 [[package]]
@@ -1680,6 +1776,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "wgpu_glyph"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fabe70968bf2cadd4055d2f36c38233936c3344db4597c542ec185df05dd97a"
+dependencies = [
+ "glyph_brush",
+ "log",
+ "wgpu",
+ "zerocopy",
+]
+
+[[package]]
 name = "winapi"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1799,7 +1907,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d089681aa106a86fade1b0128fb5daf07d5867a509ab036d99988dec80429a57"
 
 [[package]]
+name = "xi-unicode"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7395cdb9d0a6219fa0ea77d08c946adf9c1984c72fcd443ace30365f3daadef7"
+
+[[package]]
 name = "xml-rs"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b07db065a5cf61a7e4ba64f29e67db906fb1787316516c4e6e5ff0fea1efcd8a"
+
+[[package]]
+name = "zerocopy"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6580539ad917b7c026220c4b3f2c08d52ce54d6ce0dc491e66002e35388fab46"
+dependencies = [
+ "byteorder",
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d498dbd1fd7beb83c86709ae1c33ca50942889473473d287d56ce4770a18edfb"
+dependencies = [
+ "proc-macro2 1.0.10",
+ "syn",
+ "synstructure",
+]
