@@ -44,11 +44,10 @@ impl ImguiState {
         let ui = self.context.frame();
 
         {
-            imgui::Window::new(im_str!("Hello world"))
+            imgui::Window::new(im_str!("Debug info"))
                 .size([300.0, 100.0], Condition::FirstUseEver)
                 .build(&ui, || {
-                    ui.text(im_str!("Hello world!"));
-                    ui.text(im_str!("This is imgui-rs on WGPU!"));
+                    ui.text(im_str!("imgui_wgpu"));
                     ui.separator();
                     let mouse_pos = ui.io().mouse_pos;
                     ui.text(im_str!(
@@ -56,12 +55,7 @@ impl ImguiState {
                         mouse_pos[0],
                         mouse_pos[1]
                     ));
-                });
-
-            imgui::Window::new(im_str!("Hello too"))
-                .size([200.0, 50.0], Condition::FirstUseEver)
-                .position([400.0, 200.0], Condition::FirstUseEver)
-                .build(&ui, || {
+                    ui.separator();
                     ui.text(im_str!("Frametime: {:?}", delta_t));
                 });
         }
@@ -314,8 +308,7 @@ impl State {
             .build(&self.device, self.render_format);
 
         glyph_brush.queue(Section {
-            text: &format!("Frametime: {:?}", delta_t),
-            screen_position: (0.0, 20.0),
+            text: &format!("{:?}", delta_t),
             ..Section::default()
         });
 
