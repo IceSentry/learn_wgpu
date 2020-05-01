@@ -96,8 +96,8 @@ impl CameraController {
 
     pub fn update_camera(&self, camera: &mut Camera) {
         use cgmath::InnerSpace;
-        let forward = (camera.target - camera.eye).normalize();
 
+        let forward = (camera.target - camera.eye).normalize();
         if self.is_forward_pressed {
             camera.eye += forward * self.speed;
         }
@@ -106,12 +106,18 @@ impl CameraController {
         }
 
         let right = forward.cross(camera.up);
-
         if self.is_right_pressed {
             camera.eye += right * self.speed;
         }
         if self.is_left_pressed {
             camera.eye -= right * self.speed;
+        }
+
+        if self.is_up_pressed {
+            camera.eye += camera.up * self.speed;
+        }
+        if self.is_down_pressed {
+            camera.eye -= camera.up * self.speed;
         }
     }
 }
