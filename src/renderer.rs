@@ -1,4 +1,7 @@
-use crate::Config;
+use crate::{
+    camera::{Camera, CameraController},
+    texture, Config,
+};
 
 use std::mem;
 use std::time::{Duration, Instant};
@@ -12,7 +15,7 @@ use winit::window::Window;
 #[derive(Debug, Clone, Copy)]
 struct Vertex {
     position: [f32; 3],
-    color: [f32; 3],
+    tex_coords: [f32; 2],
 }
 
 unsafe impl bytemuck::Pod for Vertex {}
@@ -32,7 +35,7 @@ impl Vertex {
                 wgpu::VertexAttributeDescriptor {
                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
-                    format: wgpu::VertexFormat::Float3,
+                    format: wgpu::VertexFormat::Float2,
                 },
             ],
         }
@@ -42,23 +45,23 @@ impl Vertex {
 const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-0.0868241, 0.49240386, 0.0],
-        color: [0.5, 0.0, 0.5],
+        tex_coords: [0.4131759, 0.00759614],
     }, // A
     Vertex {
         position: [-0.49513406, 0.06958647, 0.0],
-        color: [0.5, 0.0, 0.5],
+        tex_coords: [0.0048659444, 0.43041354],
     }, // B
     Vertex {
         position: [-0.21918549, -0.44939706, 0.0],
-        color: [0.5, 0.0, 0.5],
+        tex_coords: [0.28081453, 0.949397057],
     }, // C
     Vertex {
         position: [0.35966998, -0.3473291, 0.0],
-        color: [0.5, 0.0, 0.5],
+        tex_coords: [0.85967, 0.84732911],
     }, // D
     Vertex {
         position: [0.44147372, 0.2347359, 0.0],
-        color: [0.5, 0.0, 0.5],
+        tex_coords: [0.9414737, 0.2652641],
     }, // E
 ];
 
@@ -122,24 +125,53 @@ impl ImguiState {
     }
 }
 
+#[repr(C)] // We need this for Rust to store our data correctly for the shaders
+#[derive(Debug, Copy, Clone)] // This is so we can store this in a buffer
+struct Uniforms {
+    view_proj: cgmath::Matrix4<f32>,
+}
+
+unsafe impl bytemuck::Pod for Uniforms {}
+unsafe impl bytemuck::Zeroable for Uniforms {}
+
+impl Uniforms {
+    fn new() -> Self {
+        use cgmath::SquareMatrix;
+        Self {
+            view_proj: cgmath::Matrix4::identity(),
+        }
+    }
+
+    fn update_view_proj(&mut self, camera: &Camera) {
+        self.view_proj = camera.build_view_projection_matrix();
+    }
+}
+
 pub struct Renderer {
-    pub surface: wgpu::Surface,
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub sc_desc: wgpu::SwapChainDescriptor,
-    pub swap_chain: wgpu::SwapChain,
-    pub render_pipeline: wgpu::RenderPipeline,
+    surface: wgpu::Surface,
+    adapter: wgpu::Adapter,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    sc_desc: wgpu::SwapChainDescriptor,
+    swap_chain: wgpu::SwapChain,
+    render_pipeline: wgpu::RenderPipeline,
     pub size: winit::dpi::PhysicalSize<u32>,
-    pub render_format: wgpu::TextureFormat,
-    pub scale_factor: f64,
+    render_format: wgpu::TextureFormat,
+    scale_factor: f64,
     pub clear_color: wgpu::Color,
     pub last_frame: Instant,
     pub last_frame_duration: Duration,
-    pub imgui_renderer: imgui_wgpu::Renderer,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
-    pub num_indices: u32,
+    imgui_renderer: imgui_wgpu::Renderer,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
+    diffuse_texture: texture::Texture,
+    diffuse_bind_group: wgpu::BindGroup,
+    camera: Camera,
+    pub camera_controller: CameraController,
+    uniforms: Uniforms,
+    uniform_buffer: wgpu::Buffer,
+    uniform_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
@@ -173,54 +205,108 @@ impl Renderer {
             format: render_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Mailbox,
+            present_mode: wgpu::PresentMode::Fifo,
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
         // load texture
-        {
-            let diffuse_bytes = include_bytes!("assets/happy-tree.png");
-            let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-            let diffuse_rgba = diffuse_image.as_rgba8().unwrap();
+        let diffuse_bytes = include_bytes!("assets/happy-tree.png");
+        let (diffuse_texture, cmd_buffer) =
+            texture::Texture::from_bytes(&device, diffuse_bytes).unwrap();
+        queue.submit(&[cmd_buffer]);
 
-            use image::GenericImageView;
-            let dimensions = diffuse_image.dimensions();
-
-            let size = wgpu::Extent3d {
-                width: dimensions.0,
-                height: dimensions.1,
-                depth: 1,
-            };
-            let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("happy-tree"),
-                // All textures are stored as 3d, we represent our 2d texture
-                // by setting depth to 1.
-                size: wgpu::Extent3d {
-                    width: dimensions.0,
-                    height: dimensions.1,
-                    depth: 1,
-                },
-                array_layer_count: 1,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                // SAMPLED tells wgpu that we want to use this texture in shaders
-                // COPY_DST means that we want to copy data to this texture
-                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                bindings: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::SampledTexture {
+                            multisampled: false,
+                            dimension: wgpu::TextureViewDimension::D2,
+                            component_type: wgpu::TextureComponentType::Uint,
+                        },
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler { comparison: false },
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
             });
 
-            let buffer = device.create_buffer_with_data(&diffuse_rgba, wgpu::BufferUsage::COPY_SRC);
-        }
+        let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            bindings: &[
+                wgpu::Binding {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                },
+                wgpu::Binding {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                },
+            ],
+            label: Some("diffuse_bind_group"),
+        });
+
+        let camera = Camera {
+            // +z is out of the screen
+            eye: (0.0, 1.0, 2.0).into(),
+            target: (0.0, 0.0, 0.0).into(),
+            up: cgmath::Vector3::unit_y(),
+            aspect: sc_desc.width as f32 / sc_desc.height as f32,
+            fovy: 45.0,
+            znear: 0.1,
+            zfar: 100.0,
+        };
+        let camera_controller = CameraController::new(0.2);
+
+        let mut uniforms = Uniforms::new();
+        uniforms.update_view_proj(&camera);
+
+        let uniform_buffer = device.create_buffer_with_data(
+            bytemuck::cast_slice(&[uniforms]),
+            wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+        );
+
+        let uniform_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                bindings: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::VERTEX,
+                    ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                }],
+                label: Some("uniform_bind_group_layout"),
+            });
+
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &uniform_bind_group_layout,
+            bindings: &[wgpu::Binding {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer {
+                    buffer: &uniform_buffer,
+                    range: 0..std::mem::size_of_val(&uniforms) as wgpu::BufferAddress,
+                },
+            }],
+            label: Some("uniform_bind_group"),
+        });
 
         let render_pipeline = {
             let vert_shader = include_str!("shader.vert");
             let frag_shader = include_str!("shader.frag");
 
             let vs_spirv = glsl_to_spirv::compile(vert_shader, glsl_to_spirv::ShaderType::Vertex)
-                .expect("failed to compile vertex shader");
+                .unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    panic!("Failed to compile vert shader");
+                });
             let fs_spirv = glsl_to_spirv::compile(frag_shader, glsl_to_spirv::ShaderType::Fragment)
-                .expect("failed to compile frag shader");
+                .unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    panic!("Failed to compile vert shader");
+                });
 
             let vs_data = wgpu::read_spirv(vs_spirv).expect("failed to read vertex shader");
             let fs_data = wgpu::read_spirv(fs_spirv).expect("failed to read frag shader");
@@ -230,7 +316,7 @@ impl Renderer {
 
             let render_pipeline_layout =
                 device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    bind_group_layouts: &[],
+                    bind_group_layouts: &[&texture_bind_group_layout, &uniform_bind_group_layout],
                 });
 
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -298,6 +384,13 @@ impl Renderer {
             vertex_buffer,
             index_buffer,
             num_indices: INDICES.len() as u32,
+            diffuse_texture,
+            diffuse_bind_group,
+            camera,
+            camera_controller,
+            uniforms,
+            uniform_bind_group,
+            uniform_buffer,
         }
     }
 
@@ -309,6 +402,32 @@ impl Renderer {
         self.sc_desc.width = new_size.width;
         self.sc_desc.height = new_size.height;
         self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
+    }
+
+    pub fn update(&mut self, _delta_t: Duration) {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.uniforms.update_view_proj(&self.camera);
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("update encoder"),
+            });
+
+        let staging_buffer = self.device.create_buffer_with_data(
+            bytemuck::cast_slice(&[self.uniforms]),
+            wgpu::BufferUsage::COPY_SRC,
+        );
+
+        encoder.copy_buffer_to_buffer(
+            &staging_buffer,
+            0,
+            &self.uniform_buffer,
+            0,
+            std::mem::size_of::<Uniforms>() as wgpu::BufferAddress,
+        );
+
+        self.queue.submit(&[encoder.finish()]);
     }
 
     pub fn render(&mut self, ui: imgui::Ui, delta_t: Duration, config: &Config) {
@@ -339,6 +458,8 @@ impl Renderer {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, &self.vertex_buffer, 0, 0);
             render_pass.set_index_buffer(&self.index_buffer, 0, 0);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);

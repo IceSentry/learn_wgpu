@@ -1,5 +1,7 @@
+mod camera;
 mod input;
 mod renderer;
+mod texture;
 
 use futures::executor::block_on;
 use serde_derive::Deserialize;
@@ -75,7 +77,7 @@ fn main() {
                 let delta_t = renderer.last_frame.elapsed();
                 renderer.last_frame = Instant::now();
 
-                // update(delta_t)
+                renderer.update(delta_t);
 
                 let ui = imgui_state.prepare(&window, delta_t);
                 renderer.render(ui, delta_t, &config);

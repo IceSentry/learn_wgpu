@@ -18,23 +18,6 @@ pub fn handle_input(event: &WindowEvent, renderer: &mut Renderer) -> bool {
             };
             true
         }
-        WindowEvent::KeyboardInput { input, .. } => {
-            if let KeyboardInput {
-                state: ElementState::Pressed,
-                virtual_keycode,
-                ..
-            } = input
-            {
-                return match virtual_keycode {
-                    Some(VirtualKeyCode::Space) => {
-                        println!("space");
-                        true
-                    }
-                    _ => false,
-                };
-            }
-            false
-        }
-        _ => false,
+        event => renderer.camera_controller.process_events(event),
     }
 }

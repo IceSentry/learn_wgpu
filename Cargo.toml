@@ -5,7 +5,7 @@ authors = ['IceSentry <c.giguere42@gmail.com>']
 edition = '2018'
 
 [dependencies]
-image = "0.23.4"
+image = '0.23.4'
 winit = '0.22.1'
 futures = '0.3.4'
 glsl-to-spirv = '0.1.7'
@@ -16,6 +16,8 @@ serde = '1.0.106'
 serde_derive = '1.0.106'
 toml = '0.5.6'
 bytemuck = '1.2.0'
+anyhow = '1.0.28'
+cgmath = '0.17.0'
 
 [dependencies.imgui-wgpu]
 git = 'https://github.com/Yatekii/imgui-wgpu-rs'
