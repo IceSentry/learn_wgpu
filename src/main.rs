@@ -1,9 +1,10 @@
-use tracing::log;
-use winit::{
-    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
+use bevy::{
+    input::InputPlugin,
+    prelude::*,
+    window::{WindowPlugin, WindowResized},
+    winit::{WinitPlugin, WinitWindows},
 };
+use winit::{dpi::PhysicalSize, window::Window};
 
 fn main() {
     env_logger::builder()
@@ -11,68 +12,108 @@ fn main() {
         .filter_module("wgpu_hal", log::LevelFilter::Warn)
         .init();
 
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .build(&event_loop)
-        .expect("Failed to build window");
-
-    let mut state = futures::executor::block_on(State::new(&window));
-
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            ref event,
-            window_id,
-        } if window_id == window.id() => {
-            if !state.handle_window_event(event) {
-                match event {
-                    WindowEvent::CloseRequested
-                    | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    } => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        state.resize(*physical_size);
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        // new_inner_size is &&mut so we have to dereference it twice
-                        state.resize(**new_inner_size);
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Event::RedrawRequested(_) => {
-            state.update();
-            match state.render() {
-                Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
-                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                Err(e) => log::error!("{:?}", e),
-            }
-        }
-        Event::MainEventsCleared => {
-            window.request_redraw();
-        }
-        _ => {}
-    });
+    App::new()
+        .add_plugins(MinimalPlugins)
+        .add_plugin(WindowPlugin::default())
+        .add_plugin(WinitPlugin)
+        .add_plugin(InputPlugin::default())
+        .add_startup_system(setup)
+        .add_system(resize)
+        .add_system(render)
+        .add_system(cursor_moved)
+        .add_system(spacebar)
+        .add_system(title_diagnostic)
+        .add_system(bevy::input::system::exit_on_esc_system)
+        .run();
 }
 
-struct State {
+struct Pipelines {
+    pipelines: Vec<wgpu::RenderPipeline>,
+    selected_pipeline_index: usize,
+}
+
+impl Pipelines {
+    fn get_selected_pipeline(&self) -> &wgpu::RenderPipeline {
+        &self.pipelines[self.selected_pipeline_index]
+    }
+}
+
+fn setup(mut commands: Commands, winit_windows: Res<WinitWindows>, windows: Res<Windows>) {
+    if let Some(window) = windows.get_primary() {
+        let window_handle = winit_windows
+            .get_window(window.id())
+            .expect("winit window not found");
+
+        let mut renderer = futures::executor::block_on(WgpuRenderer::new(window_handle));
+
+        let render_pipeline = renderer.create_render_pipeline(include_str!("shader.wgsl"));
+        let render_pipeline_challenge =
+            renderer.create_render_pipeline(include_str!("shader_challenge.wgsl"));
+
+        commands.insert_resource(renderer);
+        commands.insert_resource(Pipelines {
+            pipelines: vec![render_pipeline, render_pipeline_challenge],
+            selected_pipeline_index: 0,
+        });
+    }
+}
+
+fn resize(
+    mut renderer: ResMut<WgpuRenderer>,
+    mut events: EventReader<WindowResized>,
+    windows: Res<Windows>,
+) {
+    for event in events.iter() {
+        let window = windows.get(event.id).expect("window not found");
+        renderer.resize(PhysicalSize {
+            width: window.physical_width(),
+            height: window.physical_height(),
+        });
+    }
+}
+
+fn render(mut renderer: ResMut<WgpuRenderer>, pipelines: Res<Pipelines>) {
+    match renderer.render(pipelines.get_selected_pipeline()) {
+        Ok(_) => {}
+        Err(e) => log::error!("{:?}", e),
+    }
+}
+
+fn cursor_moved(mut renderer: ResMut<WgpuRenderer>, mut events: EventReader<CursorMoved>) {
+    for event in events.iter() {
+        renderer.clear_color = wgpu::Color {
+            r: event.position.x as f64 / renderer.size.width as f64,
+            g: event.position.y as f64 / renderer.size.height as f64,
+            ..renderer.clear_color
+        };
+    }
+}
+
+fn spacebar(keyboard_input: Res<Input<KeyCode>>, mut pipelines: ResMut<Pipelines>) {
+    if keyboard_input.just_pressed(KeyCode::Space) {
+        pipelines.selected_pipeline_index = (pipelines.selected_pipeline_index + 1) % 2;
+        log::info!(
+            "selected_pipeline_index {}",
+            pipelines.selected_pipeline_index
+        )
+    }
+}
+
+fn title_diagnostic(time: Res<Time>, mut windows: ResMut<Windows>) {
+    let window = windows.get_primary_mut().unwrap();
+    window.set_title(format!("dt: {}ms", time.delta().as_millis()));
+}
+
+struct WgpuRenderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     clear_color: wgpu::Color,
-    render_pipeline: wgpu::RenderPipeline,
 }
 
-impl State {
+impl WgpuRenderer {
     // Creating some of the wgpu types requires async code
     async fn new(window: &Window) -> Self {
         let size = window.inner_size();
@@ -109,55 +150,6 @@ impl State {
         };
         surface.configure(&device, &config);
 
-        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
-        });
-
-        let render_piepline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
-                push_constant_ranges: &[],
-            });
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_piepline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: "main",
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: "main",
-                targets: &[wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                }],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLAMPING
-                clamp_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-        });
-
         Self {
             surface,
             device,
@@ -165,8 +157,59 @@ impl State {
             config,
             size,
             clear_color: wgpu::Color::BLACK,
-            render_pipeline,
         }
+    }
+
+    fn create_render_pipeline(&mut self, shader_string: &str) -> wgpu::RenderPipeline {
+        let shader = self
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                source: wgpu::ShaderSource::Wgsl(shader_string.into()),
+            });
+
+        let render_piepline_layout =
+            self.device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Render Pipeline Layout"),
+                    bind_group_layouts: &[],
+                    push_constant_ranges: &[],
+                });
+
+        self.device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Render Pipeline"),
+                layout: Some(&render_piepline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "main",
+                    buffers: &[],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "main",
+                    targets: &[wgpu::ColorTargetState {
+                        format: self.config.format,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    clamp_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+            })
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -179,26 +222,7 @@ impl State {
         }
     }
 
-    fn handle_window_event(&mut self, event: &WindowEvent) -> bool {
-        match event {
-            WindowEvent::CursorMoved { position, .. } => {
-                log::info!("mouse moved {:?}", position);
-                self.clear_color = wgpu::Color {
-                    r: position.x / self.size.width as f64,
-                    g: position.y / self.size.height as f64,
-                    ..self.clear_color
-                };
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn update(&mut self) {
-        log::info!("update");
-    }
-
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self, render_pipeline: &wgpu::RenderPipeline) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -211,7 +235,7 @@ impl State {
             });
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -223,6 +247,8 @@ impl State {
                 }],
                 depth_stencil_attachment: None,
             });
+            render_pass.set_pipeline(render_pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

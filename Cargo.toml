@@ -10,4 +10,7 @@ wgpu = "0.11"
 env_logger = "0.9"
 winit = "0.25.0"
 futures = "0.3.17"
-tracing = { version = "0.1.29", features = ["log"] }
+bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
+    "bevy_winit",
+] }
+log = "0.4"
