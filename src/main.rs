@@ -4,6 +4,7 @@ use bevy::{
     window::{WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
+use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
 fn main() {
@@ -27,13 +28,25 @@ fn main() {
         .run();
 }
 
+struct Pipeline {
+    wgpu_pipeline: wgpu::RenderPipeline,
+    buffers: Buffers,
+}
+
+struct Buffers {
+    vertex_buffer: wgpu::Buffer,
+    num_vertices: usize,
+    index_buffer: Option<wgpu::Buffer>,
+    num_indices: usize,
+}
+
 struct Pipelines {
-    pipelines: Vec<wgpu::RenderPipeline>,
+    pipelines: Vec<Pipeline>,
     selected_pipeline_index: usize,
 }
 
 impl Pipelines {
-    fn get_selected_pipeline(&self) -> &wgpu::RenderPipeline {
+    fn get_selected_pipeline(&self) -> &Pipeline {
         &self.pipelines[self.selected_pipeline_index]
     }
 }
@@ -46,13 +59,19 @@ fn setup(mut commands: Commands, winit_windows: Res<WinitWindows>, windows: Res<
 
         let mut renderer = futures::executor::block_on(WgpuRenderer::new(window_handle));
 
-        let render_pipeline = renderer.create_render_pipeline(include_str!("shader.wgsl"));
-        let render_pipeline_challenge =
-            renderer.create_render_pipeline(include_str!("shader_challenge.wgsl"));
+        let triangle_pipeline = Pipeline {
+            wgpu_pipeline: renderer.create_wgpu_render_pipeline(include_str!("shader.wgsl")),
+            buffers: renderer.create_buffers(TRIANGLE_VERTICES, None),
+        };
+
+        let pentagon_pipeline = Pipeline {
+            wgpu_pipeline: renderer.create_wgpu_render_pipeline(include_str!("shader.wgsl")),
+            buffers: renderer.create_buffers(PENTAGON_VERTICES, Some(PENTAGON_INDICES)),
+        };
 
         commands.insert_resource(renderer);
         commands.insert_resource(Pipelines {
-            pipelines: vec![render_pipeline, render_pipeline_challenge],
+            pipelines: vec![triangle_pipeline, pentagon_pipeline],
             selected_pipeline_index: 0,
         });
     }
@@ -103,6 +122,74 @@ fn title_diagnostic(time: Res<Time>, mut windows: ResMut<Windows>) {
     let window = windows.get_primary_mut().unwrap();
     window.set_title(format!("dt: {}ms", time.delta().as_millis()));
 }
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
+
+impl Vertex {
+    fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
+        }
+    }
+}
+
+const TRIANGLE_VERTICES: &[Vertex] = &[
+    Vertex {
+        position: [0.0, 0.5, 0.0],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex {
+        position: [-0.5, -0.5, 0.0],
+        color: [0.0, 1.0, 0.0],
+    },
+    Vertex {
+        position: [0.5, -0.5, 0.0],
+        color: [0.0, 0.0, 1.0],
+    },
+];
+
+const PENTAGON_VERTICES: &[Vertex] = &[
+    Vertex {
+        position: [-0.0868241, 0.49240386, 0.0],
+        color: [0.5, 0.0, 0.5],
+    },
+    Vertex {
+        position: [-0.49513406, 0.06958647, 0.0],
+        color: [0.5, 0.0, 0.5],
+    },
+    Vertex {
+        position: [-0.21918549, -0.44939706, 0.0],
+        color: [0.5, 0.0, 0.5],
+    },
+    Vertex {
+        position: [0.35966998, -0.3473291, 0.0],
+        color: [0.5, 0.0, 0.5],
+    },
+    Vertex {
+        position: [0.44147372, 0.2347359, 0.0],
+        color: [0.5, 0.0, 0.5],
+    },
+];
+
+const PENTAGON_INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, 0];
 
 struct WgpuRenderer {
     surface: wgpu::Surface,
@@ -160,7 +247,7 @@ impl WgpuRenderer {
         }
     }
 
-    fn create_render_pipeline(&mut self, shader_string: &str) -> wgpu::RenderPipeline {
+    fn create_wgpu_render_pipeline(&mut self, shader_string: &str) -> wgpu::RenderPipeline {
         let shader = self
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
@@ -183,7 +270,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "main",
-                    buffers: &[],
+                    buffers: &[Vertex::layout()],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
@@ -212,6 +299,28 @@ impl WgpuRenderer {
             })
     }
 
+    fn create_buffers(&mut self, vertices: &[Vertex], indices: Option<&[u16]>) -> Buffers {
+        Buffers {
+            vertex_buffer: self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                }),
+            num_vertices: vertices.len(),
+            index_buffer: indices.map(|indices| {
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Index Buffer"),
+                        contents: bytemuck::cast_slice(indices),
+                        usage: wgpu::BufferUsages::INDEX,
+                    })
+            }),
+            num_indices: indices.map(|indices| indices.len()).unwrap_or(0),
+        }
+    }
+
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             log::info!("resizing");
@@ -222,7 +331,7 @@ impl WgpuRenderer {
         }
     }
 
-    fn render(&mut self, render_pipeline: &wgpu::RenderPipeline) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self, render_pipeline: &Pipeline) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -247,8 +356,15 @@ impl WgpuRenderer {
                 }],
                 depth_stencil_attachment: None,
             });
-            render_pass.set_pipeline(render_pipeline);
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_pipeline(&render_pipeline.wgpu_pipeline);
+            render_pass.set_vertex_buffer(0, render_pipeline.buffers.vertex_buffer.slice(..));
+
+            if let Some(index_buffer) = &render_pipeline.buffers.index_buffer {
+                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass.draw_indexed(0..render_pipeline.buffers.num_indices as u32, 0, 0..1);
+            } else {
+                render_pass.draw(0..render_pipeline.buffers.num_vertices as u32, 0..1);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
