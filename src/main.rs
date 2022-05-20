@@ -69,6 +69,8 @@ fn setup(mut commands: Commands, winit_windows: Res<WinitWindows>, windows: Res<
             buffers: renderer.create_buffers(PENTAGON_VERTICES, Some(PENTAGON_INDICES)),
         };
 
+        let texture = Texture::new(&renderer, include_bytes!("assets/happy-tree.bdff8a19.png"));
+
         commands.insert_resource(renderer);
         commands.insert_resource(Pipelines {
             pipelines: vec![triangle_pipeline, pentagon_pipeline],
@@ -191,6 +193,50 @@ const PENTAGON_VERTICES: &[Vertex] = &[
 
 const PENTAGON_INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, 0];
 
+struct Texture {}
+
+impl Texture {
+    fn new(renderer: &WgpuRenderer, diffuse_bytes: &[u8]) -> Self {
+        let diffuse_image = image::load_from_memory(diffuse_bytes).expect("failed to load image");
+        let diffuse_rgba = diffuse_image.as_rgba8().expect("failed to convert to rgb8");
+
+        use image::GenericImageView;
+        let dimensions = diffuse_image.dimensions();
+
+        let texture_size = wgpu::Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        };
+        let diffuse_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
+            size: texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            label: Some("diffuse_texture"),
+        });
+        renderer.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &diffuse_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            diffuse_rgba,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
+                rows_per_image: std::num::NonZeroU32::new(dimensions.1),
+            },
+            texture_size,
+        );
+
+        Self {}
+    }
+}
+
 struct WgpuRenderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -201,7 +247,6 @@ struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-    // Creating some of the wgpu types requires async code
     async fn new(window: &Window) -> Self {
         let size = window.inner_size();
 
@@ -233,9 +278,11 @@ impl WgpuRenderer {
             format: surface.get_preferred_format(&adapter).unwrap(),
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: wgpu::PresentMode::Immediate,
         };
         surface.configure(&device, &config);
+
+        // TODO move this
 
         Self {
             surface,
