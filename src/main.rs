@@ -5,8 +5,11 @@ use bevy::{
     winit::{WinitPlugin, WinitWindows},
 };
 use renderer::{Pipeline, Vertex, WgpuRenderer};
+use texture::Texture;
 use winit::dpi::PhysicalSize;
+
 mod renderer;
+mod texture;
 
 const TRIANGLE_VERTICES: &[Vertex] = &[
     Vertex {
@@ -60,27 +63,27 @@ const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-0.0868241, 0.49240386, 0.0],
         color: [1.0, 1.0, 1.0],
-        uv: [0.4131759, 0.99240386],
+        uv: [0.4131759, 0.00759614],
     },
     Vertex {
         position: [-0.49513406, 0.06958647, 0.0],
         color: [1.0, 1.0, 1.0],
-        uv: [0.0048659444, 0.56958647],
+        uv: [0.0048659444, 0.43041354],
     },
     Vertex {
         position: [-0.21918549, -0.44939706, 0.0],
         color: [1.0, 1.0, 1.0],
-        uv: [0.28081453, 0.05060294],
+        uv: [0.28081453, 0.949397],
     },
     Vertex {
         position: [0.35966998, -0.3473291, 0.0],
         color: [1.0, 1.0, 1.0],
-        uv: [0.85967, 0.1526709],
+        uv: [0.85967, 0.84732914],
     },
     Vertex {
         position: [0.44147372, 0.2347359, 0.0],
         color: [1.0, 1.0, 1.0],
-        uv: [0.9414737, 0.7347359],
+        uv: [0.9414737, 0.2652641],
     },
 ];
 
@@ -117,31 +120,38 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, windows: Res<Windows>) {
-    let bevy_window = windows.get_primary().expect("window should exist");
+    let bevy_window = windows.get_primary().expect("bevy window not found");
     let winit_window = winit_windows
         .get_window(bevy_window.id())
         .expect("winit window not found");
 
     let mut renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
 
+    let texture = Texture::from_bytes(
+        &renderer,
+        include_bytes!("assets/happy-tree.png"),
+        "happy-tree.png",
+    )
+    .expect("failed to create texture");
+
     let triangle_pipeline = renderer.create_pipeline(
         include_str!("shader.wgsl"),
         TRIANGLE_VERTICES,
         None,
-        include_bytes!("assets/happy-tree.bdff8a19.png"),
+        &texture,
     );
     let pentagon_pipeline = renderer.create_pipeline(
         include_str!("shader.wgsl"),
         PENTAGON_VERTICES,
         Some(PENTAGON_INDICES),
-        include_bytes!("assets/happy-tree.bdff8a19.png"),
+        &texture,
     );
 
     let pipe = renderer.create_pipeline(
         include_str!("shader.wgsl"),
         VERTICES,
         Some(PENTAGON_INDICES),
-        include_bytes!("assets/happy-tree.bdff8a19.png"),
+        &texture,
     );
 
     commands.insert_resource(renderer);

@@ -1,5 +1,7 @@
-use wgpu::{util::DeviceExt, Texture};
+use wgpu::util::DeviceExt;
 use winit::window::Window;
+
+use crate::texture::Texture;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -51,8 +53,8 @@ pub struct Buffers {
 
 pub struct WgpuRenderer {
     surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub clear_color: wgpu::Color,
@@ -109,11 +111,9 @@ impl WgpuRenderer {
         shader: &str,
         vertices: &[Vertex],
         indices: Option<&[u16]>,
-        texture: &[u8],
+        diffuse_texture: &Texture,
     ) -> Pipeline {
-        let diffuse_texture = self.create_diffuse_texture(texture);
-        let (bind_group_layout, bind_group) =
-            self.create_diffuse_texture_bind_group(&diffuse_texture);
+        let (bind_group_layout, bind_group) = self.create_texture_bind_group(diffuse_texture);
         let render_pipeline_layout =
             self.device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -177,94 +177,49 @@ impl WgpuRenderer {
             })
     }
 
-    pub fn create_diffuse_texture(&self, diffuse_bytes: &[u8]) -> Texture {
-        let diffuse_image = image::load_from_memory(diffuse_bytes).expect("failed to load image");
-        let diffuse_rgba = diffuse_image.as_rgba8().expect("failed to convert to rgb8");
-
-        use image::GenericImageView;
-        let (texture_width, texture_height) = diffuse_image.dimensions();
-
-        let texture_size = wgpu::Extent3d {
-            width: texture_width,
-            height: texture_height,
-            depth_or_array_layers: 1,
-        };
-        let diffuse_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            label: Some("diffuse_texture"),
-        });
-        self.queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            diffuse_rgba,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * texture_width),
-                rows_per_image: std::num::NonZeroU32::new(texture_height),
-            },
-            texture_size,
-        );
-        diffuse_texture
-    }
-
-    pub fn create_diffuse_texture_bind_group(
+    pub fn create_texture_bind_group(
         &self,
-        texture: &wgpu::Texture,
+        texture: &Texture,
     ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let diffuse_texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let diffuse_sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-
-        let texture_bind_group_layout =
-            self.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("texture_bind_group_layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                multisampled: false,
-                            },
-                            count: None,
+        let layout = self
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("texture_bind_group_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                    ],
-                });
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("diffuse_bind_group"),
-            layout: &texture_bind_group_layout,
+            layout: &layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
                 },
             ],
         });
-        (texture_bind_group_layout, bind_group)
+        (layout, bind_group)
     }
 
     pub fn create_buffers(&mut self, vertices: &[Vertex], indices: Option<&[u16]>) -> Buffers {

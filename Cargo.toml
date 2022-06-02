@@ -16,3 +16,4 @@ bevy = { version = "0.7", default-features = false, features = ["bevy_winit"] }
 log = "0.4"
 bytemuck = { version = "1.7", features = ["derive"] }
 image = "0.24"
+anyhow = "1.0.57"
