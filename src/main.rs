@@ -110,6 +110,7 @@ fn main() {
         .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
+        .add_system(rotate)
         .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
@@ -230,6 +231,29 @@ fn update_camera(
     );
 }
 
-fn rotate() {
-    // Quat::ro
+fn rotate(
+    renderer: Res<WgpuRenderer>,
+    pipeline: Res<Pipeline>,
+    time: Res<Time>,
+    mut angle: Local<f32>,
+) {
+    // TODO add a transform uniform and update that
+    // instead of manually moving the vertices on the cpu
+    *angle += 1.0 * time.delta_seconds();
+    *angle %= std::f32::consts::TAU;
+
+    let rotation = Quat::from_rotation_y(*angle);
+    let vertices: Vec<Vertex> = VERTICES
+        .iter()
+        .map(|v| Vertex {
+            position: rotation.mul_vec3(v.position.into()).to_array(),
+            ..*v
+        })
+        .collect();
+
+    renderer.queue.write_buffer(
+        &pipeline.buffers.vertex_buffer,
+        0,
+        bytemuck::cast_slice(&vertices[..]),
+    );
 }

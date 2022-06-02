@@ -46,7 +46,7 @@ pub struct Pipeline {
 }
 
 pub struct Buffers {
-    vertex_buffer: wgpu::Buffer,
+    pub vertex_buffer: wgpu::Buffer,
     num_vertices: usize,
     index_buffer: Option<wgpu::Buffer>,
     num_indices: usize,
@@ -268,7 +268,7 @@ impl WgpuRenderer {
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Vertex Buffer"),
                     contents: bytemuck::cast_slice(vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 }),
             num_vertices: vertices.len(),
             index_buffer: indices.map(|indices| {
