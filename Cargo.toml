@@ -2,17 +2,17 @@
 name = 'learn_wgpu'
 version = '0.1.0'
 authors = ['IceSentry <c.giguere42@gmail.com>']
-edition = '2018'
-resolver = "2"
+edition = '2021'
 
 [dependencies]
-wgpu = "0.11"
+wgpu = "0.12"
 env_logger = "0.9"
-winit = "0.25"
+winit = "0.26.1"
 futures = "0.3"
-bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
-    "bevy_winit",
-] }
+# bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
+#     "bevy_winit",
+# ] }
+bevy = { version = "0.7", default-features = false, features = ["bevy_winit"] }
 log = "0.4"
 bytemuck = { version = "1.7", features = ["derive"] }
-image = "0.23"
+image = "0.24"

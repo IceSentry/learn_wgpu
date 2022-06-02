@@ -4,7 +4,7 @@ struct VertexOutput {
 };
 
 [[stage(vertex)]]
-fn main(
+fn vertex(
     [[builtin(vertex_index)]] in_vertex_index: u32,
 ) -> VertexOutput {
     var out: VertexOutput;
@@ -16,6 +16,6 @@ fn main(
 }
 
 [[stage(fragment)]]
-fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     return vec4<f32>(in.position, 0.5, 1.0);
 }
