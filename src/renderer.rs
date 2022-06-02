@@ -41,7 +41,8 @@ impl Vertex {
 pub struct Pipeline {
     pub wgpu_pipeline: wgpu::RenderPipeline,
     pub buffers: Buffers,
-    pub bind_group: wgpu::BindGroup,
+    pub texture_bind_group: wgpu::BindGroup,
+    pub camera_bind_group: wgpu::BindGroup,
 }
 
 pub struct Buffers {
@@ -55,7 +56,7 @@ pub struct WgpuRenderer {
     surface: wgpu::Surface,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
+    pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub clear_color: wgpu::Color,
 }
@@ -112,19 +113,26 @@ impl WgpuRenderer {
         vertices: &[Vertex],
         indices: Option<&[u16]>,
         diffuse_texture: &Texture,
+        camera_buffer: &wgpu::Buffer,
     ) -> Pipeline {
-        let (bind_group_layout, bind_group) = self.create_texture_bind_group(diffuse_texture);
+        let (texture_bind_group_layout, texture_bind_group) =
+            self.create_texture_bind_group(diffuse_texture);
+        let (camera_bind_group_layout, camera_bind_group) =
+            self.create_camera_bind_group(camera_buffer);
+
         let render_pipeline_layout =
             self.device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
-                    bind_group_layouts: &[&bind_group_layout],
+                    bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
                     push_constant_ranges: &[],
                 });
+
         Pipeline {
             wgpu_pipeline: self.create_wgpu_render_pipeline(shader, &render_pipeline_layout),
             buffers: self.create_buffers(vertices, indices),
-            bind_group,
+            texture_bind_group,
+            camera_bind_group,
         }
     }
 
@@ -222,6 +230,37 @@ impl WgpuRenderer {
         (layout, bind_group)
     }
 
+    pub fn create_camera_bind_group(
+        &self,
+        camera_buffer: &wgpu::Buffer,
+    ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
+        let camera_bind_group_layout =
+            self.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("camera_bind_group_layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
+
+        let camera_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("camera_bind_group"),
+            layout: &camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+        });
+        (camera_bind_group_layout, camera_bind_group)
+    }
+
     pub fn create_buffers(&mut self, vertices: &[Vertex], indices: Option<&[u16]>) -> Buffers {
         Buffers {
             vertex_buffer: self
@@ -254,7 +293,7 @@ impl WgpuRenderer {
         }
     }
 
-    pub fn render(&mut self, render_pipeline: &Pipeline) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, pipeline: &Pipeline) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -279,15 +318,16 @@ impl WgpuRenderer {
                 }],
                 depth_stencil_attachment: None,
             });
-            render_pass.set_pipeline(&render_pipeline.wgpu_pipeline);
-            render_pass.set_bind_group(0, &render_pipeline.bind_group, &[]);
-            render_pass.set_vertex_buffer(0, render_pipeline.buffers.vertex_buffer.slice(..));
+            render_pass.set_pipeline(&pipeline.wgpu_pipeline);
+            render_pass.set_bind_group(0, &pipeline.texture_bind_group, &[]);
+            render_pass.set_bind_group(1, &pipeline.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, pipeline.buffers.vertex_buffer.slice(..));
 
-            if let Some(index_buffer) = &render_pipeline.buffers.index_buffer {
+            if let Some(index_buffer) = &pipeline.buffers.index_buffer {
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..render_pipeline.buffers.num_indices as u32, 0, 0..1);
+                render_pass.draw_indexed(0..pipeline.buffers.num_indices as u32, 0, 0..1);
             } else {
-                render_pass.draw(0..render_pipeline.buffers.num_vertices as u32, 0..1);
+                render_pass.draw(0..pipeline.buffers.num_vertices as u32, 0..1);
             }
         }
 
