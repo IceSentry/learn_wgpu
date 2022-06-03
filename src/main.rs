@@ -143,6 +143,9 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
     )
     .expect("failed to create texture");
 
+    let depth_texture =
+        Texture::create_depth_texture(&renderer.device, &renderer.config, "depth_texture");
+
     let width = renderer.config.width as f32;
     let height = renderer.config.height as f32;
     let camera = Camera {
