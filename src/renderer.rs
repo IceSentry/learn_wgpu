@@ -2,7 +2,7 @@ use bevy::math::{Mat4, Quat, Vec3};
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
-use crate::texture::Texture;
+use crate::{depth_pass::DepthPass, texture::Texture};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -13,7 +13,7 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -165,6 +165,7 @@ impl WgpuRenderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_pipeline(
         &mut self,
         shader: &str,
@@ -175,7 +176,8 @@ impl WgpuRenderer {
         instance_data: &[InstanceRaw],
     ) -> Pipeline {
         let (texture_bind_group_layout, texture_bind_group) =
-            self.create_texture_bind_group(diffuse_texture);
+            self.create_texture_bind_group(diffuse_texture, 0, "diffuse_bind_group");
+
         let (camera_bind_group_layout, camera_bind_group) =
             self.create_camera_bind_group(camera_buffer);
 
@@ -253,14 +255,16 @@ impl WgpuRenderer {
     pub fn create_texture_bind_group(
         &self,
         texture: &Texture,
+        binding_offset: u32,
+        label: &str,
     ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
         let layout = self
             .device
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("texture_bind_group_layout"),
+                label: Some(&format!("{label}_layout")),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
-                        binding: 0,
+                        binding: binding_offset,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -270,7 +274,7 @@ impl WgpuRenderer {
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
-                        binding: 1,
+                        binding: binding_offset + 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
@@ -279,15 +283,15 @@ impl WgpuRenderer {
             });
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("diffuse_bind_group"),
+            label: Some(label),
             layout: &layout,
             entries: &[
                 wgpu::BindGroupEntry {
-                    binding: 0,
+                    binding: binding_offset,
                     resource: wgpu::BindingResource::TextureView(&texture.view),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 1,
+                    binding: binding_offset + 1,
                     resource: wgpu::BindingResource::Sampler(&texture.sampler),
                 },
             ],
@@ -371,6 +375,7 @@ impl WgpuRenderer {
         &mut self,
         pipeline: &Pipeline,
         instances: &[Instance],
+        depth_pass: &DepthPass,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -384,6 +389,7 @@ impl WgpuRenderer {
             });
 
         {
+            // TODO extract default render pass
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -394,13 +400,19 @@ impl WgpuRenderer {
                         store: true,
                     },
                 }],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_pass.texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                }),
             });
             render_pass.set_pipeline(&pipeline.wgpu_pipeline);
             render_pass.set_bind_group(0, &pipeline.texture_bind_group, &[]);
             render_pass.set_bind_group(1, &pipeline.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, pipeline.buffers.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, pipeline.buffers.instance_buffer.slice(..));
             render_pass.set_vertex_buffer(1, pipeline.buffers.instance_buffer.slice(..));
 
             render_pass.set_index_buffer(
@@ -414,8 +426,10 @@ impl WgpuRenderer {
             );
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        // TODO toggle
+        depth_pass.render(&view, &mut encoder);
 
+        self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())

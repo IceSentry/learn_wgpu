@@ -6,12 +6,14 @@ use bevy::{
     winit::{WinitPlugin, WinitWindows},
 };
 use camera::{Camera, CameraController, CameraUniform};
+use depth_pass::DepthPass;
 use renderer::{Instance, Pipeline, Vertex, WgpuRenderer};
 use texture::Texture;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
 mod camera;
+mod depth_pass;
 mod renderer;
 mod texture;
 
@@ -119,13 +121,11 @@ fn main() {
         .add_system(update_window_title)
         .add_system(update_camera)
         .add_system(move_instances)
-        // .add_system(rotate)
         .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
 
 struct CameraBuffer(wgpu::Buffer);
-struct InstanceBuffer(wgpu::Buffer);
 struct Instances(Vec<Instance>);
 
 fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, windows: Res<Windows>) {
@@ -142,9 +142,6 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
         "happy-tree.png",
     )
     .expect("failed to create texture");
-
-    let depth_texture =
-        Texture::create_depth_texture(&renderer.device, &renderer.config, "depth_texture");
 
     let width = renderer.config.width as f32;
     let height = renderer.config.height as f32;
@@ -176,7 +173,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
             let rotation = if translation == Vec3::ZERO {
                 Quat::from_axis_angle(Vec3::Z, 0.0)
             } else {
-                Quat::from_axis_angle(Vec3::Z, std::f32::consts::FRAC_PI_4)
+                Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
             };
             instances.push(Instance {
                 translation,
@@ -196,6 +193,8 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
         &instance_data,
     );
 
+    let depth_pass = DepthPass::new(&renderer.device, &renderer.config);
+
     commands.insert_resource(renderer);
     commands.insert_resource(pipeline);
     commands.insert_resource(camera);
@@ -203,12 +202,14 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
     commands.insert_resource(camera_uniform);
     commands.insert_resource(CameraBuffer(camera_buffer));
     commands.insert_resource(Instances(instances));
+    commands.insert_resource(depth_pass);
 }
 
 fn resize(
     mut renderer: ResMut<WgpuRenderer>,
     mut events: EventReader<WindowResized>,
     windows: Res<Windows>,
+    mut depth_pass: ResMut<DepthPass>,
 ) {
     for event in events.iter() {
         let window = windows.get(event.id).expect("window not found");
@@ -216,11 +217,17 @@ fn resize(
             width: window.physical_width(),
             height: window.physical_height(),
         });
+        depth_pass.resize(&renderer.device, &renderer.config);
     }
 }
 
-fn render(mut renderer: ResMut<WgpuRenderer>, pipeline: Res<Pipeline>, instances: Res<Instances>) {
-    match renderer.render(&pipeline, &instances.0) {
+fn render(
+    mut renderer: ResMut<WgpuRenderer>,
+    pipeline: Res<Pipeline>,
+    instances: Res<Instances>,
+    depth_pass: Res<DepthPass>,
+) {
+    match renderer.render(&pipeline, &instances.0, &depth_pass) {
         Ok(_) => {}
         Err(e) => log::error!("{:?}", e),
     }
@@ -262,33 +269,6 @@ fn update_camera(
         &camera_buffer.0,
         0,
         bytemuck::cast_slice(&[*camera_uniform]),
-    );
-}
-
-fn rotate(
-    renderer: Res<WgpuRenderer>,
-    pipeline: Res<Pipeline>,
-    time: Res<Time>,
-    mut angle: Local<f32>,
-) {
-    // TODO add a transform uniform and update that
-    // instead of manually moving the vertices on the cpu
-    *angle += 1.0 * time.delta_seconds();
-    *angle %= std::f32::consts::TAU;
-
-    let rotation = Quat::from_rotation_y(*angle);
-    let vertices: Vec<Vertex> = VERTICES
-        .iter()
-        .map(|v| Vertex {
-            position: rotation.mul_vec3(v.position.into()).to_array(),
-            ..*v
-        })
-        .collect();
-
-    renderer.queue.write_buffer(
-        &pipeline.buffers.vertex_buffer,
-        0,
-        bytemuck::cast_slice(&vertices[..]),
     );
 }
 
@@ -336,7 +316,6 @@ impl Wave {
         // Wave number
         let k = std::f32::consts::TAU / self.wavelength;
         let r = (x * x + z * z).sqrt();
-
         self.amplitude * (k * (r - self.offset)).sin()
     }
 }
