@@ -1,12 +1,12 @@
 use bevy::{
     input::InputPlugin,
-    math::vec3,
+    math::{const_vec3, vec3},
     prelude::*,
     window::{WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
 use camera::{Camera, CameraController, CameraUniform};
-use renderer::{Pipeline, Vertex, WgpuRenderer};
+use renderer::{Instance, Pipeline, Vertex, WgpuRenderer};
 use texture::Texture;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
@@ -93,10 +93,18 @@ const VERTICES: &[Vertex] = &[
 
 const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, 0];
 
+const NUM_INSTANCES_PER_ROW: u32 = 10;
+const INSTANCE_DISPLACEMENT: Vec3 = const_vec3!([
+    NUM_INSTANCES_PER_ROW as f32 * 0.5,
+    0.0,
+    NUM_INSTANCES_PER_ROW as f32 * 0.5,
+]);
+
 fn main() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .filter_module("wgpu_hal", log::LevelFilter::Error)
+        .filter_module("wgpu_core", log::LevelFilter::Error)
         .init();
 
     App::new()
@@ -110,12 +118,15 @@ fn main() {
         .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
-        .add_system(rotate)
+        .add_system(move_instances)
+        // .add_system(rotate)
         .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
 
 struct CameraBuffer(wgpu::Buffer);
+struct InstanceBuffer(wgpu::Buffer);
+struct Instances(Vec<Instance>);
 
 fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, windows: Res<Windows>) {
     let bevy_window = windows.get_primary().expect("bevy window not found");
@@ -155,12 +166,31 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+    let mut instances: Vec<_> = vec![];
+    for z in 0..NUM_INSTANCES_PER_ROW {
+        for x in 0..NUM_INSTANCES_PER_ROW {
+            let translation = vec3(x as f32, 0.0, z as f32) - INSTANCE_DISPLACEMENT;
+            let rotation = if translation == Vec3::ZERO {
+                Quat::from_axis_angle(Vec3::Z, 0.0)
+            } else {
+                Quat::from_axis_angle(Vec3::Z, std::f32::consts::FRAC_PI_4)
+            };
+            instances.push(Instance {
+                translation,
+                rotation,
+            });
+        }
+    }
+
+    let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+
     let pipeline = renderer.create_pipeline(
         include_str!("shader.wgsl"),
         VERTICES,
-        Some(INDICES),
+        INDICES,
         &texture,
         &camera_buffer,
+        &instance_data,
     );
 
     commands.insert_resource(renderer);
@@ -169,6 +199,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
     commands.insert_resource(CameraController::new(0.05));
     commands.insert_resource(camera_uniform);
     commands.insert_resource(CameraBuffer(camera_buffer));
+    commands.insert_resource(Instances(instances));
 }
 
 fn resize(
@@ -185,8 +216,8 @@ fn resize(
     }
 }
 
-fn render(mut renderer: ResMut<WgpuRenderer>, pipeline: Res<Pipeline>) {
-    match renderer.render(&pipeline) {
+fn render(mut renderer: ResMut<WgpuRenderer>, pipeline: Res<Pipeline>, instances: Res<Instances>) {
+    match renderer.render(&pipeline, &instances.0) {
         Ok(_) => {}
         Err(e) => log::error!("{:?}", e),
     }
@@ -256,4 +287,53 @@ fn rotate(
         0,
         bytemuck::cast_slice(&vertices[..]),
     );
+}
+
+fn move_instances(
+    renderer: Res<WgpuRenderer>,
+    pipeline: Res<Pipeline>,
+    mut instances: ResMut<Instances>,
+    time: Res<Time>,
+    mut wave: Local<Wave>,
+) {
+    wave.offset += time.delta_seconds() * wave.frequency;
+
+    for instance in instances.0.iter_mut() {
+        instance.translation.y = wave.wave_height(instance.translation.x, instance.translation.z);
+    }
+
+    let data: Vec<_> = instances.0.iter().map(Instance::to_raw).collect();
+    renderer.queue.write_buffer(
+        &pipeline.buffers.instance_buffer,
+        0,
+        bytemuck::cast_slice(&data[..]),
+    );
+}
+
+pub struct Wave {
+    pub amplitude: f32,
+    pub wavelength: f32,
+    pub frequency: f32,
+    pub offset: f32,
+}
+
+impl Default for Wave {
+    fn default() -> Self {
+        Self {
+            amplitude: 0.25,
+            wavelength: 6.0,
+            frequency: 3.0,
+            offset: 0.0,
+        }
+    }
+}
+
+impl Wave {
+    pub fn wave_height(&self, x: f32, z: f32) -> f32 {
+        // Wave number
+        let k = std::f32::consts::TAU / self.wavelength;
+        let r = (x * x + z * z).sqrt();
+
+        self.amplitude * (k * (r - self.offset)).sin()
+    }
 }

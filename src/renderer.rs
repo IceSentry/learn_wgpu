@@ -1,3 +1,4 @@
+use bevy::math::{Mat4, Quat, Vec3};
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
@@ -47,9 +48,66 @@ pub struct Pipeline {
 
 pub struct Buffers {
     pub vertex_buffer: wgpu::Buffer,
-    num_vertices: usize,
-    index_buffer: Option<wgpu::Buffer>,
+    index_buffer: wgpu::Buffer,
     num_indices: usize,
+    pub instance_buffer: wgpu::Buffer,
+}
+
+pub struct Instance {
+    pub translation: Vec3,
+    pub rotation: Quat,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceRaw {
+    model: [[f32; 4]; 4],
+}
+
+impl Instance {
+    pub fn to_raw(&self) -> InstanceRaw {
+        InstanceRaw {
+            model: Mat4::from_rotation_translation(self.rotation, self.translation)
+                .to_cols_array_2d(),
+        }
+    }
+}
+
+impl InstanceRaw {
+    pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            // We need to switch from using a step mode of Vertex to Instance
+            // This means that our shaders will only change to use the next
+            // instance when the shader starts processing a new instance
+            step_mode: wgpu::VertexStepMode::Instance,
+            // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
+            // for each vec4. We'll have to reassemble the mat4 in
+            // the shader.
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
 }
 
 pub struct WgpuRenderer {
@@ -83,7 +141,7 @@ impl WgpuRenderer {
                     limits: wgpu::Limits::default(),
                     label: None,
                 },
-                None, // Trace path
+                None,
             )
             .await
             .expect("Failed to request device");
@@ -111,9 +169,10 @@ impl WgpuRenderer {
         &mut self,
         shader: &str,
         vertices: &[Vertex],
-        indices: Option<&[u16]>,
+        indices: &[u16],
         diffuse_texture: &Texture,
         camera_buffer: &wgpu::Buffer,
+        instance_data: &[InstanceRaw],
     ) -> Pipeline {
         let (texture_bind_group_layout, texture_bind_group) =
             self.create_texture_bind_group(diffuse_texture);
@@ -130,7 +189,7 @@ impl WgpuRenderer {
 
         Pipeline {
             wgpu_pipeline: self.create_wgpu_render_pipeline(shader, &render_pipeline_layout),
-            buffers: self.create_buffers(vertices, indices),
+            buffers: self.create_buffers(vertices, indices, instance_data),
             texture_bind_group,
             camera_bind_group,
         }
@@ -155,7 +214,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "vertex",
-                    buffers: &[Vertex::layout()],
+                    buffers: &[Vertex::layout(), InstanceRaw::layout()],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
@@ -261,7 +320,12 @@ impl WgpuRenderer {
         (camera_bind_group_layout, camera_bind_group)
     }
 
-    pub fn create_buffers(&mut self, vertices: &[Vertex], indices: Option<&[u16]>) -> Buffers {
+    pub fn create_buffers(
+        &mut self,
+        vertices: &[Vertex],
+        indices: &[u16],
+        instance_data: &[InstanceRaw],
+    ) -> Buffers {
         Buffers {
             vertex_buffer: self
                 .device
@@ -270,22 +334,26 @@ impl WgpuRenderer {
                     contents: bytemuck::cast_slice(vertices),
                     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 }),
-            num_vertices: vertices.len(),
-            index_buffer: indices.map(|indices| {
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Index Buffer"),
-                        contents: bytemuck::cast_slice(indices),
-                        usage: wgpu::BufferUsages::INDEX,
-                    })
-            }),
-            num_indices: indices.map(|indices| indices.len()).unwrap_or(0),
+            index_buffer: self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                }),
+            num_indices: indices.len(),
+            instance_buffer: self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Instance Buffer"),
+                    contents: bytemuck::cast_slice(instance_data),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                }),
         }
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            log::info!("resizing");
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
@@ -293,7 +361,11 @@ impl WgpuRenderer {
         }
     }
 
-    pub fn render(&mut self, pipeline: &Pipeline) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(
+        &mut self,
+        pipeline: &Pipeline,
+        instances: &[Instance],
+    ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -322,13 +394,18 @@ impl WgpuRenderer {
             render_pass.set_bind_group(0, &pipeline.texture_bind_group, &[]);
             render_pass.set_bind_group(1, &pipeline.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, pipeline.buffers.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, pipeline.buffers.instance_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, pipeline.buffers.instance_buffer.slice(..));
 
-            if let Some(index_buffer) = &pipeline.buffers.index_buffer {
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..pipeline.buffers.num_indices as u32, 0, 0..1);
-            } else {
-                render_pass.draw(0..pipeline.buffers.num_vertices as u32, 0..1);
-            }
+            render_pass.set_index_buffer(
+                pipeline.buffers.index_buffer.slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
+            render_pass.draw_indexed(
+                0..pipeline.buffers.num_indices as _,
+                0,
+                0..instances.len() as _,
+            );
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
