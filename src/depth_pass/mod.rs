@@ -1,27 +1,51 @@
 use wgpu::util::DeviceExt;
 
-use crate::{renderer::Vertex, texture::Texture};
+use crate::texture::Texture;
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub uv: [f32; 2],
+}
+
+impl Vertex {
+    pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as u64,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        }
+    }
+}
 
 // This is just a quad
 const DEPTH_VERTICES: &[Vertex] = &[
     Vertex {
         position: [-1.0, -1.0, 0.0],
-        color: [1.0, 1.0, 1.0],
         uv: [0.0, 1.0],
     },
     Vertex {
         position: [1.0, -1.0, 0.0],
-        color: [1.0, 1.0, 1.0],
         uv: [1.0, 1.0],
     },
     Vertex {
         position: [1.0, 1.0, 0.0],
-        color: [1.0, 1.0, 1.0],
         uv: [1.0, 0.0],
     },
     Vertex {
         position: [-1.0, 1.0, 0.0],
-        color: [1.0, 1.0, 1.0],
         uv: [0.0, 0.0],
     },
 ];

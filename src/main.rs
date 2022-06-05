@@ -1,106 +1,26 @@
 use bevy::{
     input::InputPlugin,
-    math::{const_vec3, vec3},
+    math::vec3,
     prelude::*,
     window::{WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
 use camera::{Camera, CameraController, CameraUniform};
 use depth_pass::DepthPass;
-use renderer::{Instance, Pipeline, Vertex, WgpuRenderer};
+use model::Model;
+use renderer::{Instance, Pipeline, WgpuRenderer};
 use texture::Texture;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
 mod camera;
 mod depth_pass;
+mod model;
 mod renderer;
+mod resources;
 mod texture;
 
-// const TRIANGLE_VERTICES: &[Vertex] = &[
-//     Vertex {
-//         position: [0.0, 0.5, 0.0],
-//         color: [1.0, 0.0, 0.0],
-//         uv: [0.0, 0.0],
-//     },
-//     Vertex {
-//         position: [-0.5, -0.5, 0.0],
-//         color: [0.0, 1.0, 0.0],
-//         uv: [0.0, 0.0],
-//     },
-//     Vertex {
-//         position: [0.5, -0.5, 0.0],
-//         color: [0.0, 0.0, 1.0],
-//         uv: [0.0, 0.0],
-//     },
-// ];
-
-// const PENTAGON_VERTICES: &[Vertex] = &[
-//     Vertex {
-//         position: [-0.0868241, 0.49240386, 0.0],
-//         color: [0.5, 0.0, 0.5],
-//         uv: [0.0, 0.0],
-//     },
-//     Vertex {
-//         position: [-0.49513406, 0.06958647, 0.0],
-//         color: [0.5, 0.0, 0.5],
-//         uv: [0.0, 0.0],
-//     },
-//     Vertex {
-//         position: [-0.21918549, -0.44939706, 0.0],
-//         color: [0.5, 0.0, 0.5],
-//         uv: [0.0, 0.0],
-//     },
-//     Vertex {
-//         position: [0.35966998, -0.3473291, 0.0],
-//         color: [0.5, 0.0, 0.5],
-//         uv: [0.0, 0.0],
-//     },
-//     Vertex {
-//         position: [0.44147372, 0.2347359, 0.0],
-//         color: [0.5, 0.0, 0.5],
-//         uv: [0.0, 0.0],
-//     },
-// ];
-
-// const PENTAGON_INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, 0];
-
-const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.0868241, 0.49240386, 0.0],
-        color: [1.0, 1.0, 1.0],
-        uv: [0.4131759, 0.00759614],
-    },
-    Vertex {
-        position: [-0.49513406, 0.06958647, 0.0],
-        color: [1.0, 1.0, 1.0],
-        uv: [0.0048659444, 0.43041354],
-    },
-    Vertex {
-        position: [-0.21918549, -0.44939706, 0.0],
-        color: [1.0, 1.0, 1.0],
-        uv: [0.28081453, 0.949397],
-    },
-    Vertex {
-        position: [0.35966998, -0.3473291, 0.0],
-        color: [1.0, 1.0, 1.0],
-        uv: [0.85967, 0.84732914],
-    },
-    Vertex {
-        position: [0.44147372, 0.2347359, 0.0],
-        color: [1.0, 1.0, 1.0],
-        uv: [0.9414737, 0.2652641],
-    },
-];
-
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, 0];
-
 const NUM_INSTANCES_PER_ROW: u32 = 10;
-const INSTANCE_DISPLACEMENT: Vec3 = const_vec3!([
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-    0.0,
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-]);
 
 fn main() {
     env_logger::builder()
@@ -121,12 +41,14 @@ fn main() {
         .add_system(update_window_title)
         .add_system(update_camera)
         .add_system(move_instances)
+        .add_system(update_show_depth)
         .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
 
 struct CameraBuffer(wgpu::Buffer);
 struct Instances(Vec<Instance>);
+struct ShowDepthBuffer(bool);
 
 fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, windows: Res<Windows>) {
     let bevy_window = windows.get_primary().expect("bevy window not found");
@@ -137,8 +59,9 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
     let mut renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
 
     let texture = Texture::from_bytes(
-        &renderer,
-        include_bytes!("assets/happy-tree.png"),
+        &renderer.device,
+        &renderer.queue,
+        &resources::load_bytes("happy-tree.png").expect("failed to load texture"),
         "happy-tree.png",
     )
     .expect("failed to create texture");
@@ -166,10 +89,14 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+    const SPACE_BETWEEN: f32 = 3.0;
     let mut instances: Vec<_> = vec![];
     for z in 0..NUM_INSTANCES_PER_ROW {
         for x in 0..NUM_INSTANCES_PER_ROW {
-            let translation = vec3(x as f32, 0.0, z as f32) - INSTANCE_DISPLACEMENT;
+            let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+
+            let translation = vec3(x as f32, 0.0, z as f32);
             let rotation = if translation == Vec3::ZERO {
                 Quat::from_axis_angle(Vec3::Z, 0.0)
             } else {
@@ -186,12 +113,18 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
 
     let pipeline = renderer.create_pipeline(
         include_str!("shader.wgsl"),
-        VERTICES,
-        INDICES,
         &texture,
         &camera_buffer,
         &instance_data,
     );
+
+    let obj_model = futures::executor::block_on(resources::load_model(
+        "cube.obj",
+        &renderer.device,
+        &renderer.queue,
+        &pipeline.texture_bind_group_layout,
+    ))
+    .unwrap();
 
     let depth_pass = DepthPass::new(&renderer.device, &renderer.config);
 
@@ -203,6 +136,8 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
     commands.insert_resource(CameraBuffer(camera_buffer));
     commands.insert_resource(Instances(instances));
     commands.insert_resource(depth_pass);
+    commands.insert_resource(ShowDepthBuffer(false));
+    commands.insert_resource(obj_model);
 }
 
 fn resize(
@@ -226,8 +161,16 @@ fn render(
     pipeline: Res<Pipeline>,
     instances: Res<Instances>,
     depth_pass: Res<DepthPass>,
+    show_depth_buffer: Res<ShowDepthBuffer>,
+    obj_model: Res<Model>,
 ) {
-    match renderer.render(&pipeline, &instances.0, &depth_pass) {
+    match renderer.render(
+        &pipeline,
+        &instances.0,
+        &depth_pass,
+        show_depth_buffer.0,
+        &obj_model,
+    ) {
         Ok(_) => {}
         Err(e) => log::error!("{:?}", e),
     }
@@ -246,6 +189,12 @@ fn cursor_moved(mut renderer: ResMut<WgpuRenderer>, mut events: EventReader<Curs
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
     let window = windows.get_primary_mut().unwrap();
     window.set_title(format!("dt: {}ms", time.delta().as_millis()));
+}
+
+fn update_show_depth(keyboard_input: Res<Input<KeyCode>>, mut draw_depth: ResMut<ShowDepthBuffer>) {
+    if keyboard_input.just_pressed(KeyCode::X) {
+        draw_depth.0 = !draw_depth.0;
+    }
 }
 
 fn update_camera(
@@ -303,9 +252,9 @@ pub struct Wave {
 impl Default for Wave {
     fn default() -> Self {
         Self {
-            amplitude: 0.25,
-            wavelength: 6.0,
-            frequency: 3.0,
+            amplitude: 1.0,
+            wavelength: 10.0,
+            frequency: 2.0,
             offset: 0.0,
         }
     }

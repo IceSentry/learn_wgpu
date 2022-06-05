@@ -1,5 +1,3 @@
-use crate::renderer::WgpuRenderer;
-
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -9,13 +7,19 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn from_bytes(renderer: &WgpuRenderer, bytes: &[u8], label: &str) -> anyhow::Result<Self> {
+    pub fn from_bytes(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+        label: &str,
+    ) -> anyhow::Result<Self> {
         let img = image::load_from_memory(bytes)?;
-        Self::from_image(renderer, &img, Some(label))
+        Self::from_image(device, queue, &img, Some(label))
     }
 
     pub fn from_image(
-        renderer: &WgpuRenderer,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
@@ -29,7 +33,7 @@ impl Texture {
             height: texture_height,
             depth_or_array_layers: 1,
         };
-        let texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,
             mip_level_count: 1,
@@ -39,7 +43,7 @@ impl Texture {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         });
 
-        renderer.queue.write_texture(
+        queue.write_texture(
             wgpu::ImageCopyTexture {
                 aspect: wgpu::TextureAspect::All,
                 texture: &texture,
@@ -56,7 +60,7 @@ impl Texture {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = renderer.device.create_sampler(&wgpu::SamplerDescriptor {
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             mag_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });

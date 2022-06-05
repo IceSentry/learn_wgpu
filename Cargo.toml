@@ -3,6 +3,7 @@ name = 'learn_wgpu'
 version = '0.1.0'
 authors = ['IceSentry <c.giguere42@gmail.com>']
 edition = '2021'
+build = "src/build.rs"
 
 [dependencies]
 wgpu = "0.12"
@@ -17,3 +18,9 @@ log = "0.4"
 bytemuck = { version = "1.7", features = ["derive"] }
 image = "0.24"
 anyhow = "1.0.57"
+tobj = { version = "3.2.2", features = ["async"] }
+
+[build-dependencies]
+anyhow = "1.0"
+fs_extra = "1.2"
+glob = "0.3"

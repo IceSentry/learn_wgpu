@@ -2,54 +2,21 @@ use bevy::math::{Mat4, Quat, Vec3};
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
-use crate::{depth_pass::DepthPass, texture::Texture};
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
-    pub position: [f32; 3],
-    pub color: [f32; 3],
-    pub uv: [f32; 2],
-}
-
-impl Vertex {
-    pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as u64,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as u64
-                        + std::mem::size_of::<[f32; 3]>() as u64,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
+use crate::{
+    depth_pass::DepthPass,
+    model::{self, Model, ModelVertex, Vertex},
+    texture::Texture,
+};
 
 pub struct Pipeline {
     pub wgpu_pipeline: wgpu::RenderPipeline,
     pub buffers: Buffers,
     pub texture_bind_group: wgpu::BindGroup,
+    pub texture_bind_group_layout: wgpu::BindGroupLayout,
     pub camera_bind_group: wgpu::BindGroup,
 }
 
 pub struct Buffers {
-    pub vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: usize,
     pub instance_buffer: wgpu::Buffer,
 }
 
@@ -169,8 +136,6 @@ impl WgpuRenderer {
     pub fn create_pipeline(
         &mut self,
         shader: &str,
-        vertices: &[Vertex],
-        indices: &[u16],
         diffuse_texture: &Texture,
         camera_buffer: &wgpu::Buffer,
         instance_data: &[InstanceRaw],
@@ -191,8 +156,9 @@ impl WgpuRenderer {
 
         Pipeline {
             wgpu_pipeline: self.create_wgpu_render_pipeline(shader, &render_pipeline_layout),
-            buffers: self.create_buffers(vertices, indices, instance_data),
+            buffers: self.create_buffers(instance_data),
             texture_bind_group,
+            texture_bind_group_layout,
             camera_bind_group,
         }
     }
@@ -216,7 +182,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "vertex",
-                    buffers: &[Vertex::layout(), InstanceRaw::layout()],
+                    buffers: &[ModelVertex::layout(), InstanceRaw::layout()],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
@@ -330,28 +296,8 @@ impl WgpuRenderer {
         (camera_bind_group_layout, camera_bind_group)
     }
 
-    pub fn create_buffers(
-        &mut self,
-        vertices: &[Vertex],
-        indices: &[u16],
-        instance_data: &[InstanceRaw],
-    ) -> Buffers {
+    pub fn create_buffers(&mut self, instance_data: &[InstanceRaw]) -> Buffers {
         Buffers {
-            vertex_buffer: self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Vertex Buffer"),
-                    contents: bytemuck::cast_slice(vertices),
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                }),
-            index_buffer: self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Index Buffer"),
-                    contents: bytemuck::cast_slice(indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                }),
-            num_indices: indices.len(),
             instance_buffer: self
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -376,6 +322,8 @@ impl WgpuRenderer {
         pipeline: &Pipeline,
         instances: &[Instance],
         depth_pass: &DepthPass,
+        show_depth_buffer: bool,
+        obj_model: &Model,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -412,22 +360,27 @@ impl WgpuRenderer {
             render_pass.set_pipeline(&pipeline.wgpu_pipeline);
             render_pass.set_bind_group(0, &pipeline.texture_bind_group, &[]);
             render_pass.set_bind_group(1, &pipeline.camera_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, pipeline.buffers.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, pipeline.buffers.instance_buffer.slice(..));
 
-            render_pass.set_index_buffer(
-                pipeline.buffers.index_buffer.slice(..),
-                wgpu::IndexFormat::Uint16,
-            );
-            render_pass.draw_indexed(
-                0..pipeline.buffers.num_indices as _,
-                0,
-                0..instances.len() as _,
-            );
+            use model::DrawModel;
+            render_pass.draw_mesh_instanced(&obj_model.meshes[0], 0..instances.len() as u32);
+
+            // render_pass.set_vertex_buffer(0, pipeline.buffers.vertex_buffer.slice(..));
+
+            // render_pass.set_index_buffer(
+            //     pipeline.buffers.index_buffer.slice(..),
+            //     wgpu::IndexFormat::Uint16,
+            // );
+            // render_pass.draw_indexed(
+            //     0..pipeline.buffers.num_indices as _,
+            //     0,
+            //     0..instances.len() as _,
+            // );
         }
 
-        // TODO toggle
-        depth_pass.render(&view, &mut encoder);
+        if show_depth_buffer {
+            depth_pass.render(&view, &mut encoder);
+        }
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
