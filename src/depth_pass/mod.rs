@@ -86,7 +86,7 @@ impl DepthPass {
         });
 
         let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Shadow Display Shader"),
+            label: Some("Depth Pass Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("depth.wgsl").into()),
         });
 
@@ -125,8 +125,6 @@ impl DepthPass {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            // If the pipeline will be used with a multiview render pass, this
-            // indicates how many array layers the attachments will have.
             multiview: None,
         });
 

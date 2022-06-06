@@ -4,7 +4,7 @@ use winit::window::Window;
 
 use crate::{
     depth_pass::DepthPass,
-    model::{self, Model, ModelVertex, Vertex},
+    model::{Model, ModelVertex, Vertex},
     texture::Texture,
 };
 
@@ -362,20 +362,7 @@ impl WgpuRenderer {
             render_pass.set_bind_group(1, &pipeline.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(1, pipeline.buffers.instance_buffer.slice(..));
 
-            use model::DrawModel;
-            render_pass.draw_mesh_instanced(&obj_model.meshes[0], 0..instances.len() as u32);
-
-            // render_pass.set_vertex_buffer(0, pipeline.buffers.vertex_buffer.slice(..));
-
-            // render_pass.set_index_buffer(
-            //     pipeline.buffers.index_buffer.slice(..),
-            //     wgpu::IndexFormat::Uint16,
-            // );
-            // render_pass.draw_indexed(
-            //     0..pipeline.buffers.num_indices as _,
-            //     0,
-            //     0..instances.len() as _,
-            // );
+            obj_model.meshes[0].draw_instanced(&mut render_pass, 0..instances.len() as u32);
         }
 
         if show_depth_buffer {

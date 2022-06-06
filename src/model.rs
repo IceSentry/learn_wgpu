@@ -59,22 +59,18 @@ pub struct Mesh {
     pub material: usize,
 }
 
-pub trait DrawModel<'a> {
-    fn draw_mesh(&mut self, mesh: &'a Mesh);
-    fn draw_mesh_instanced(&mut self, mesh: &'a Mesh, instances: Range<u32>);
-}
-
-impl<'a, 'b> DrawModel<'b> for wgpu::RenderPass<'a>
-where
-    'b: 'a,
-{
-    fn draw_mesh(&mut self, mesh: &'b Mesh) {
-        self.draw_mesh_instanced(mesh, 0..1);
+impl Mesh {
+    pub fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        self.draw_instanced(render_pass, 0..1);
     }
 
-    fn draw_mesh_instanced(&mut self, mesh: &'b Mesh, instances: Range<u32>) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.draw_indexed(0..mesh.num_elements, 0, instances);
+    pub fn draw_instanced<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        instances: Range<u32>,
+    ) {
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.draw_indexed(0..self.num_elements, 0, instances);
     }
 }
