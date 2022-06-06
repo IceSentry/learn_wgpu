@@ -45,32 +45,43 @@ pub struct Model {
     pub materials: Vec<Material>,
 }
 
+#[derive(Debug)]
 pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
     pub bind_group: wgpu::BindGroup,
 }
 
+#[derive(Debug)]
 pub struct Mesh {
     pub name: String,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
-    pub material: usize,
+    pub material_id: usize,
 }
 
 impl Mesh {
-    pub fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        self.draw_instanced(render_pass, 0..1);
+    pub fn draw<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        material: &'a Material,
+        camera_bind_group: &'a wgpu::BindGroup,
+    ) {
+        self.draw_instanced(render_pass, 0..1, material, camera_bind_group);
     }
 
     pub fn draw_instanced<'a>(
         &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,
         instances: Range<u32>,
+        material: &'a Material,
+        camera_bind_group: &'a wgpu::BindGroup,
     ) {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.set_bind_group(0, &material.bind_group, &[]);
+        render_pass.set_bind_group(1, camera_bind_group, &[]);
         render_pass.draw_indexed(0..self.num_elements, 0, instances);
     }
 }

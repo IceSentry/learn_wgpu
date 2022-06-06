@@ -13,6 +13,11 @@ use texture::Texture;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
+use crate::{
+    model::{ModelVertex, Vertex},
+    renderer::InstanceRaw,
+};
+
 mod camera;
 mod depth_pass;
 mod model;
@@ -56,7 +61,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
         .get_window(bevy_window.id())
         .expect("winit window not found");
 
-    let mut renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
+    let renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
 
     let texture = Texture::from_bytes(
         &renderer.device,
@@ -90,7 +95,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
         });
 
     const SPACE_BETWEEN: f32 = 3.0;
-    let mut instances: Vec<_> = vec![];
+    let mut instances: Vec<_> = Vec::new();
     for z in 0..NUM_INSTANCES_PER_ROW {
         for x in 0..NUM_INSTANCES_PER_ROW {
             let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
@@ -102,29 +107,104 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
             } else {
                 Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
             };
+
             instances.push(Instance {
-                translation,
                 rotation,
+                translation,
             });
         }
     }
 
-    let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+    let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
 
-    let pipeline = renderer.create_pipeline(
-        include_str!("shader.wgsl"),
-        &texture,
-        &camera_buffer,
-        &instance_data,
-    );
+    let (texture_bind_group_layout, texture_bind_group) =
+        renderer.create_texture_bind_group(&texture, 0, "diffuse_bind_group");
+
+    let (camera_bind_group_layout, camera_bind_group) =
+        renderer.create_camera_bind_group(&camera_buffer);
+
+    let render_pipeline_layout =
+        renderer
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
     let obj_model = futures::executor::block_on(resources::load_model(
         "cube.obj",
         &renderer.device,
         &renderer.queue,
-        &pipeline.texture_bind_group_layout,
+        &texture_bind_group_layout,
     ))
     .unwrap();
+
+    let shader = renderer
+        .device
+        .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        });
+
+    let pipe = renderer
+        .device
+        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vertex",
+                buffers: &[ModelVertex::layout(), InstanceRaw::layout()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fragment",
+                targets: &[wgpu::ColorTargetState {
+                    format: renderer.config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                }],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+        });
+
+    let instance_buffer = renderer
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+    let pipeline = Pipeline {
+        wgpu_pipeline: pipe,
+        instance_buffer,
+        texture_bind_group,
+        texture_bind_group_layout,
+        camera_bind_group,
+    };
 
     let depth_pass = DepthPass::new(&renderer.device, &renderer.config);
 
@@ -166,7 +246,7 @@ fn render(
 ) {
     match renderer.render(
         &pipeline,
-        &instances.0,
+        instances.0.len() as u32,
         &depth_pass,
         show_depth_buffer.0,
         &obj_model,
@@ -236,7 +316,7 @@ fn move_instances(
 
     let data: Vec<_> = instances.0.iter().map(Instance::to_raw).collect();
     renderer.queue.write_buffer(
-        &pipeline.buffers.instance_buffer,
+        &pipeline.instance_buffer,
         0,
         bytemuck::cast_slice(&data[..]),
     );

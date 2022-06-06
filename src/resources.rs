@@ -101,6 +101,7 @@ pub async fn load_model(
                     ],
                 })
                 .collect();
+
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{file_name:?} Vertex Buffer")),
                 contents: bytemuck::cast_slice(&vertices),
@@ -117,10 +118,13 @@ pub async fn load_model(
                 vertex_buffer,
                 index_buffer,
                 num_elements: m.mesh.indices.len() as u32,
-                material: m.mesh.material_id.unwrap_or(0),
+                material_id: m.mesh.material_id.unwrap_or(0),
             }
         })
         .collect();
+
+    println!("{:#?}", meshes);
+    println!("{:#?}", materials);
 
     Ok(Model { meshes, materials })
 }
