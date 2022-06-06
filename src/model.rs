@@ -45,6 +45,36 @@ pub struct Model {
     pub materials: Vec<Material>,
 }
 
+impl Model {
+    pub fn draw<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
+    ) {
+        self.draw_instanced(render_pass, 0..1, camera_bind_group, light_bind_group);
+    }
+
+    pub fn draw_instanced<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
+    ) {
+        for mesh in &self.meshes {
+            let material = &self.materials[mesh.material_id];
+            mesh.draw_instanced(
+                render_pass,
+                instances.clone(),
+                material,
+                camera_bind_group,
+                light_bind_group,
+            );
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Material {
     pub name: String,
@@ -67,8 +97,15 @@ impl Mesh {
         render_pass: &mut wgpu::RenderPass<'a>,
         material: &'a Material,
         camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
     ) {
-        self.draw_instanced(render_pass, 0..1, material, camera_bind_group);
+        self.draw_instanced(
+            render_pass,
+            0..1,
+            material,
+            camera_bind_group,
+            light_bind_group,
+        );
     }
 
     pub fn draw_instanced<'a>(
@@ -77,11 +114,13 @@ impl Mesh {
         instances: Range<u32>,
         material: &'a Material,
         camera_bind_group: &'a wgpu::BindGroup,
+        light_bind_group: &'a wgpu::BindGroup,
     ) {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.set_bind_group(0, &material.bind_group, &[]);
         render_pass.set_bind_group(1, camera_bind_group, &[]);
+        render_pass.set_bind_group(2, light_bind_group, &[]);
         render_pass.draw_indexed(0..self.num_elements, 0, instances);
     }
 }

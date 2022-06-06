@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::texture::Texture;
+use crate::{renderer::WgpuRenderer, texture::Texture};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -63,70 +63,46 @@ pub struct DepthPass {
 }
 
 impl DepthPass {
-    pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
-        let texture = Texture::create_depth_texture(device, config, "depth_texture");
-        let layout = DepthPass::create_bind_group_layout(device);
-        let bind_group = DepthPass::create_bind_group(device, &layout, &texture);
+    pub fn new(renderer: &WgpuRenderer) -> Self {
+        let texture =
+            Texture::create_depth_texture(&renderer.device, &renderer.config, "depth_texture");
+        let layout = DepthPass::create_bind_group_layout(&renderer.device);
+        let bind_group = DepthPass::create_bind_group(&renderer.device, &layout, &texture);
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Depth Pass VB"),
-            contents: bytemuck::cast_slice(DEPTH_VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Depth Pass IB"),
-            contents: bytemuck::cast_slice(DEPTH_INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let vertex_buffer = renderer
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Depth Pass VB"),
+                contents: bytemuck::cast_slice(DEPTH_VERTICES),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let index_buffer = renderer
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Depth Pass IB"),
+                contents: bytemuck::cast_slice(DEPTH_INDICES),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Depth Pass Pipeline Layout"),
-            bind_group_layouts: &[&layout],
-            push_constant_ranges: &[],
-        });
+        let pipeline_layout =
+            renderer
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Depth Pass Pipeline Layout"),
+                    bind_group_layouts: &[&layout],
+                    push_constant_ranges: &[],
+                });
 
-        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Depth Pass Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("depth.wgsl").into()),
-        });
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Depth Pass Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: "vertex",
-                buffers: &[Vertex::layout()],
+        let render_pipeline = renderer.create_render_pipeline(
+            "Depth Pass Render Pipeline",
+            wgpu::ShaderModuleDescriptor {
+                label: Some("Depth Pass Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("depth.wgsl").into()),
             },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: "fragment",
-                targets: &[wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent::REPLACE,
-                        alpha: wgpu::BlendComponent::REPLACE,
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                }],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
+            &pipeline_layout,
+            &[Vertex::layout()],
+            None,
+        );
 
         Self {
             texture,

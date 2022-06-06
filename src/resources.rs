@@ -1,3 +1,4 @@
+use bevy::math::Vec3;
 use wgpu::util::DeviceExt;
 
 // TODO add support for wasm
@@ -32,6 +33,11 @@ pub fn load_texture(
 ) -> anyhow::Result<Texture> {
     let data = load_bytes(file_name)?;
     Texture::from_bytes(device, queue, &data, file_name)
+}
+
+fn face_normal(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> [f32; 3] {
+    let (a, b, c) = (Vec3::from(a), Vec3::from(b), Vec3::from(c));
+    (b - a).cross(c - a).normalize().into()
 }
 
 pub async fn load_model(
@@ -82,25 +88,67 @@ pub async fn load_model(
             bind_group,
         });
     }
+    if materials.is_empty() {
+        let diffuse_texture = load_texture("colors.png", device, queue)?;
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                },
+            ],
+        });
+        materials.push(Material {
+            name: "default texture".to_string(),
+            diffuse_texture,
+            bind_group,
+        });
+    }
 
     let meshes: Vec<_> = models
         .into_iter()
         .map(|m| {
-            let vertices: Vec<_> = (0..m.mesh.positions.len() / 3)
+            let mut vertices: Vec<_> = (0..m.mesh.positions.len() / 3)
                 .map(|i| ModelVertex {
                     position: [
                         m.mesh.positions[i * 3],
                         m.mesh.positions[i * 3 + 1],
                         m.mesh.positions[i * 3 + 2],
                     ],
-                    uv: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
-                    normal: [
-                        m.mesh.normals[i * 3],
-                        m.mesh.normals[i * 3 + 1],
-                        m.mesh.normals[i * 3 + 2],
-                    ],
+                    uv: if m.mesh.texcoords.is_empty() {
+                        [0.0, 0.0]
+                    } else {
+                        [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]]
+                    },
+                    normal: if m.mesh.normals.is_empty() {
+                        [0.0, 0.0, 0.0]
+                    } else {
+                        [
+                            m.mesh.normals[i * 3],
+                            m.mesh.normals[i * 3 + 1],
+                            m.mesh.normals[i * 3 + 2],
+                        ]
+                    },
                 })
                 .collect();
+
+            // compute_flat_normals
+            if m.mesh.texcoords.is_empty() {
+                for v in vertices.chunks_exact_mut(3) {
+                    if let [v1, v2, v3] = v {
+                        let normal = face_normal(v1.position, v2.position, v3.position);
+                        v1.normal = normal;
+                        v2.normal = normal;
+                        v3.normal = normal;
+                    }
+                }
+            }
 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{file_name:?} Vertex Buffer")),
@@ -122,9 +170,6 @@ pub async fn load_model(
             }
         })
         .collect();
-
-    println!("{:#?}", meshes);
-    println!("{:#?}", materials);
 
     Ok(Model { meshes, materials })
 }

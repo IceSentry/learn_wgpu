@@ -1,14 +1,16 @@
 use bevy::math::{Mat4, Quat, Vec3};
 use winit::window::Window;
 
-use crate::{depth_pass::DepthPass, model::Model, texture::Texture};
+use crate::{depth_pass::DepthPass, light::draw_light_model, model::Model, texture::Texture};
 
 pub struct Pipeline {
-    pub wgpu_pipeline: wgpu::RenderPipeline,
+    pub render_pipeline: wgpu::RenderPipeline,
+    pub light_pipeline: wgpu::RenderPipeline,
     pub instance_buffer: wgpu::Buffer,
     pub texture_bind_group: wgpu::BindGroup,
     pub texture_bind_group_layout: wgpu::BindGroupLayout,
     pub camera_bind_group: wgpu::BindGroup,
+    pub light_bind_group: wgpu::BindGroup,
 }
 
 pub struct Instance {
@@ -123,22 +125,52 @@ impl WgpuRenderer {
         }
     }
 
-    // #[allow(clippy::too_many_arguments)]
-    // pub fn create_pipeline(
-    //     &mut self,
-    //     shader: &str,
-    //     diffuse_texture: &Texture,
-    //     camera_buffer: &wgpu::Buffer,
-    //     instance_data: &[InstanceRaw],
-    // ) -> Pipeline {
-    // }
+    pub fn create_render_pipeline(
+        &self,
+        label: &str,
+        shader: wgpu::ShaderModuleDescriptor,
+        pipeline_layout: &wgpu::PipelineLayout,
+        vertex_layouts: &[wgpu::VertexBufferLayout],
+        depth_stencil: Option<wgpu::DepthStencilState>,
+    ) -> wgpu::RenderPipeline {
+        let shader = self.device.create_shader_module(&shader);
 
-    // pub fn create_wgpu_render_pipeline(
-    //     &mut self,
-    //     shader_string: &str,
-    //     render_pipeline_layout: &wgpu::PipelineLayout,
-    // ) -> wgpu::RenderPipeline {
-    // }
+        self.device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "vertex",
+                    buffers: vertex_layouts,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "fragment",
+                    targets: &[wgpu::ColorTargetState {
+                        format: self.config.format,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+            })
+    }
 
     pub fn create_texture_bind_group(
         &self,
@@ -267,19 +299,23 @@ impl WgpuRenderer {
                     stencil_ops: None,
                 }),
             });
-            // render_pass.set_bind_group(0, &pipeline.texture_bind_group, &[]);
-            // render_pass.set_bind_group(1, &pipeline.camera_bind_group, &[]);
+
             render_pass.set_vertex_buffer(1, pipeline.instance_buffer.slice(..));
 
-            render_pass.set_pipeline(&pipeline.wgpu_pipeline);
+            render_pass.set_pipeline(&pipeline.light_pipeline);
+            draw_light_model(
+                &mut render_pass,
+                obj_model,
+                &pipeline.camera_bind_group,
+                &pipeline.light_bind_group,
+            );
 
-            let mesh = &obj_model.meshes[0];
-            let material = &obj_model.materials[mesh.material_id];
-            mesh.draw_instanced(
+            render_pass.set_pipeline(&pipeline.render_pipeline);
+            obj_model.draw_instanced(
                 &mut render_pass,
                 0..instance_count,
-                material,
                 &pipeline.camera_bind_group,
+                &pipeline.light_bind_group,
             );
         }
 
