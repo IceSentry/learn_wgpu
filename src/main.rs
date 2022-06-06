@@ -349,11 +349,13 @@ fn update_light(
     renderer: Res<WgpuRenderer>,
     mut light_uniform: ResMut<LightUniform>,
     light_buffer: Res<LightBuffer>,
+    time: Res<Time>,
 ) {
     let old_position = light_uniform.position;
-    light_uniform.position = Quat::from_axis_angle(Vec3::Y, 1.0_f32.to_radians())
-        .mul_vec3(old_position.into())
-        .to_array();
+    light_uniform.position =
+        Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * time.delta_seconds())
+            .mul_vec3(old_position.into())
+            .to_array();
     renderer
         .queue
         .write_buffer(&light_buffer.0, 0, bytemuck::cast_slice(&[*light_uniform]));
