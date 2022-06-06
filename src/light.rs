@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use bevy::{math::Vec3, prelude::Color};
+
 use crate::model::{Mesh, Model};
 
 // main.rs
@@ -15,11 +17,11 @@ pub struct LightUniform {
 }
 
 impl LightUniform {
-    pub fn new(position: [f32; 3], color: [f32; 3]) -> Self {
+    pub fn new(position: Vec3, color: Color) -> Self {
         Self {
-            position,
+            position: position.to_array(),
             _padding: 0,
-            color,
+            color: [color.r(), color.g(), color.b()],
             _padding2: 0,
         }
     }

@@ -50,11 +50,13 @@ fn main() {
         .add_system(update_camera)
         .add_system(move_instances)
         .add_system(update_show_depth)
+        .add_system(update_light)
         .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
 
 struct CameraBuffer(wgpu::Buffer);
+struct LightBuffer(wgpu::Buffer);
 struct Instances(Vec<Instance>);
 struct ShowDepthBuffer(bool);
 
@@ -119,7 +121,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
 
     let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
 
-    let light_uniform = LightUniform::new([2.0, 4.0, 2.0], [1.0, 1.0, 1.0]);
+    let light_uniform = LightUniform::new(vec3(2.0, 4.0, 2.0), Color::WHITE);
 
     let light_buffer = renderer
         .device
@@ -258,6 +260,8 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
     commands.insert_resource(depth_pass);
     commands.insert_resource(ShowDepthBuffer(false));
     commands.insert_resource(obj_model);
+    commands.insert_resource(light_uniform);
+    commands.insert_resource(LightBuffer(light_buffer));
 }
 
 fn resize(
@@ -339,6 +343,20 @@ fn update_camera(
         0,
         bytemuck::cast_slice(&[*camera_uniform]),
     );
+}
+
+fn update_light(
+    renderer: Res<WgpuRenderer>,
+    mut light_uniform: ResMut<LightUniform>,
+    light_buffer: Res<LightBuffer>,
+) {
+    let old_position = light_uniform.position;
+    light_uniform.position = Quat::from_axis_angle(Vec3::Y, 1.0_f32.to_radians())
+        .mul_vec3(old_position.into())
+        .to_array();
+    renderer
+        .queue
+        .write_buffer(&light_buffer.0, 0, bytemuck::cast_slice(&[*light_uniform]));
 }
 
 fn move_instances(
