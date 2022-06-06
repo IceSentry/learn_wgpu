@@ -89,7 +89,7 @@ pub async fn load_model(
         });
     }
     if materials.is_empty() {
-        let diffuse_texture = load_texture("colors.png", device, queue)?;
+        let diffuse_texture = load_texture("pink.png", device, queue)?;
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout,
@@ -122,7 +122,7 @@ pub async fn load_model(
                         m.mesh.positions[i * 3 + 2],
                     ],
                     uv: if m.mesh.texcoords.is_empty() {
-                        [0.0, 0.0]
+                        [1.0, 1.0]
                     } else {
                         [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]]
                     },
@@ -139,16 +139,16 @@ pub async fn load_model(
                 .collect();
 
             // compute_flat_normals
-            if m.mesh.texcoords.is_empty() {
-                for v in vertices.chunks_exact_mut(3) {
-                    if let [v1, v2, v3] = v {
-                        let normal = face_normal(v1.position, v2.position, v3.position);
-                        v1.normal = normal;
-                        v2.normal = normal;
-                        v3.normal = normal;
-                    }
-                }
-            }
+            // if m.mesh.texcoords.is_empty() {
+            //     for v in vertices.chunks_exact_mut(3) {
+            //         if let [v1, v2, v3] = v {
+            //             let normal = face_normal(v1.position, v2.position, v3.position);
+            //             v1.normal = normal;
+            //             v2.normal = normal;
+            //             v3.normal = normal;
+            //         }
+            //     }
+            // }
 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{file_name:?} Vertex Buffer")),

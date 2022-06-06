@@ -1,6 +1,6 @@
 use bevy::{
     input::InputPlugin,
-    math::vec3,
+    math::{const_vec3, vec3},
     prelude::*,
     window::{WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
@@ -27,8 +27,11 @@ mod renderer;
 mod resources;
 mod texture;
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
-const SPACE_BETWEEN: f32 = 3.0;
+const NUM_INSTANCES_PER_ROW: u32 = 1;
+const SPACE_BETWEEN: f32 = 5.0;
+const LIGHT_POSITION: Vec3 = const_vec3!([2.0, 1.0, 2.0]);
+const MODEL_NAME: &str = "cube.obj";
+const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 3.0, 8.0]);
 
 fn main() {
     env_logger::builder()
@@ -45,10 +48,10 @@ fn main() {
         .add_startup_system(setup)
         .add_system(resize)
         .add_system(render)
-        .add_system(cursor_moved)
+        // .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
-        .add_system(move_instances)
+        // .add_system(move_instances)
         .add_system(update_show_depth)
         .add_system(update_light)
         .add_system(bevy::input::system::exit_on_esc_system)
@@ -66,7 +69,10 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
         .get_window(bevy_window.id())
         .expect("winit window not found");
 
-    let renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
+    let renderer = futures::executor::block_on(WgpuRenderer::new(
+        winit_window,
+        Color::rgba(0.1, 0.2, 0.3, 1.0),
+    ));
 
     let texture = Texture::from_bytes(
         &renderer.device,
@@ -79,7 +85,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
     let width = renderer.config.width as f32;
     let height = renderer.config.height as f32;
     let camera = Camera {
-        eye: vec3(0.0, 1.0, 2.0),
+        eye: CAMERRA_EYE,
         target: vec3(0.0, 0.0, 0.0),
         up: Vec3::Y,
         aspect: width / height,
@@ -102,12 +108,12 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
     let mut instances: Vec<_> = Vec::new();
     for z in 0..NUM_INSTANCES_PER_ROW {
         for x in 0..NUM_INSTANCES_PER_ROW {
-            let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-            let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
 
             let translation = vec3(x as f32, 0.0, z as f32);
             let rotation = if translation == Vec3::ZERO {
-                Quat::from_axis_angle(Vec3::Z, 0.0)
+                Quat::from_axis_angle(Vec3::Y, 0.0)
             } else {
                 Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
             };
@@ -121,7 +127,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
 
     let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
 
-    let light_uniform = LightUniform::new(vec3(2.0, 4.0, 2.0), Color::WHITE);
+    let light_uniform = LightUniform::new(LIGHT_POSITION, Color::WHITE);
 
     let light_buffer = renderer
         .device
@@ -179,7 +185,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
             });
 
     let obj_model = futures::executor::block_on(resources::load_model(
-        "cube.obj",
+        MODEL_NAME,
         &renderer.device,
         &renderer.queue,
         &texture_bind_group_layout,

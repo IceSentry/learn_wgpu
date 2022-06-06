@@ -1,4 +1,7 @@
-use bevy::math::{Mat4, Quat, Vec3};
+use bevy::{
+    math::{Mat4, Quat, Vec3},
+    prelude::Color,
+};
 use winit::window::Window;
 
 use crate::{depth_pass::DepthPass, light::draw_light_model, model::Model, texture::Texture};
@@ -80,7 +83,7 @@ pub struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-    pub async fn new(window: &Window) -> Self {
+    pub async fn new(window: &Window, clear_color: Color) -> Self {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::all());
@@ -121,7 +124,12 @@ impl WgpuRenderer {
             queue,
             config,
             size,
-            clear_color: wgpu::Color::BLACK,
+            clear_color: wgpu::Color {
+                r: clear_color.r() as f64,
+                g: clear_color.g() as f64,
+                b: clear_color.b() as f64,
+                a: clear_color.a() as f64,
+            },
         }
     }
 

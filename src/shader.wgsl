@@ -14,7 +14,7 @@ var<uniform> light: Light;
 struct Vertex {
     [[location(0)]] position: vec3<f32>;
     [[location(1)]] uv: vec2<f32>;
-    [[location(2)]] normal: vec2<f32>;
+    [[location(2)]] normal: vec3<f32>;
 };
 
 struct InstanceInput {
@@ -27,6 +27,8 @@ struct InstanceInput {
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
     [[location(0)]] uv: vec2<f32>;
+    [[location(1)]] world_normal: vec3<f32>;
+    [[location(2)]] world_position: vec3<f32>;
 };
 
 [[group(0), binding(0)]]
@@ -48,7 +50,11 @@ fn vertex(
 
     var out: VertexOutput;
     out.uv = vertex.uv;
-    out.clip_position = camera.view_proj * model_matrix * vec4<f32>(vertex.position, 1.0);
+    out.world_normal = vertex.normal;
+
+    var world_position: vec4<f32> = model_matrix * vec4<f32>(vertex.position, 1.0);
+    out.world_position = world_position.xyz;
+    out.clip_position = camera.view_proj * world_position;
     return out;
 }
 
@@ -57,10 +63,16 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
 
     // We don't need (or want) much ambient light, so 0.1 is fine
-    let ambient_strength = 0.1;
+    let ambient_strength = 0.01;
     let ambient_color = light.color * ambient_strength;
 
-    let result = ambient_color * color.rgb;
+    let light_dir = normalize(light.position - in.world_position);
+
+    let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
+    let diffuse_color = light.color * diffuse_strength;
+
+    let result = (diffuse_color) * color.rgb;
+    // let result = (ambient_color + diffuse_color) * color.rgb;
 
     return vec4<f32>(result, color.a);
 }
