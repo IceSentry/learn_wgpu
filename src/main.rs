@@ -8,7 +8,7 @@ use bevy::{
 use camera::{Camera, CameraController, CameraUniform};
 use depth_pass::DepthPass;
 use light::LightUniform;
-use model::Model;
+use render_phase::{InstanceCount, LightModel, RenderPhase3d};
 use renderer::{Instance, Pipeline, WgpuRenderer};
 use texture::Texture;
 use wgpu::util::DeviceExt;
@@ -23,15 +23,17 @@ mod camera;
 mod depth_pass;
 mod light;
 mod model;
+mod render_phase;
 mod renderer;
 mod resources;
 mod texture;
 
 const NUM_INSTANCES_PER_ROW: u32 = 10;
 const SPACE_BETWEEN: f32 = 3.0;
-const LIGHT_POSITION: Vec3 = const_vec3!([3.0, 2.5, 2.0]);
+const LIGHT_POSITION: Vec3 = const_vec3!([4.0, 4.0, 0.0]);
 const MODEL_NAME: &str = "cube.obj";
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 3.0, 8.0]);
+const SCALE: Vec3 = const_vec3!([1., 1., 1.]);
 
 fn main() {
     env_logger::builder()
@@ -45,9 +47,9 @@ fn main() {
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
         .add_plugin(InputPlugin::default())
-        .add_startup_system(setup)
+        .add_startup_system(setup.exclusive_system())
+        .add_system(render.exclusive_system())
         .add_system(resize)
-        .add_system(render)
         .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
@@ -61,12 +63,17 @@ fn main() {
 struct CameraBuffer(wgpu::Buffer);
 struct LightBuffer(wgpu::Buffer);
 struct Instances(Vec<Instance>);
-struct ShowDepthBuffer(bool);
+pub struct ShowDepthBuffer(bool);
 
-fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, windows: Res<Windows>) {
-    let bevy_window = windows.get_primary().expect("bevy window not found");
+fn setup(world: &mut World) {
+    let window_id = {
+        let windows = world.resource::<Windows>();
+        windows.get_primary().expect("bevy window not found").id()
+    };
+
+    let winit_windows = world.non_send_resource_mut::<WinitWindows>();
     let winit_window = winit_windows
-        .get_window(bevy_window.id())
+        .get_window(window_id)
         .expect("winit window not found");
 
     let renderer = futures::executor::block_on(WgpuRenderer::new(
@@ -121,6 +128,7 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
             instances.push(Instance {
                 rotation,
                 translation,
+                scale: SCALE,
             });
         }
     }
@@ -166,10 +174,10 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
         });
 
     let (texture_bind_group_layout, texture_bind_group) =
-        renderer.create_texture_bind_group(&texture, 0, "diffuse_bind_group");
+        texture::create_texture_bind_group(&renderer, &texture);
 
     let (camera_bind_group_layout, camera_bind_group) =
-        renderer.create_camera_bind_group(&camera_buffer);
+        camera::create_camera_bind_group(&renderer, &camera_buffer);
 
     let render_pipeline_layout =
         renderer
@@ -256,18 +264,37 @@ fn setup(mut commands: Commands, winit_windows: NonSendMut<WinitWindows>, window
 
     let depth_pass = DepthPass::new(&renderer);
 
-    commands.insert_resource(renderer);
-    commands.insert_resource(pipeline);
-    commands.insert_resource(camera);
-    commands.insert_resource(CameraController::new(0.05));
-    commands.insert_resource(camera_uniform);
-    commands.insert_resource(CameraBuffer(camera_buffer));
-    commands.insert_resource(Instances(instances));
-    commands.insert_resource(depth_pass);
-    commands.insert_resource(ShowDepthBuffer(false));
-    commands.insert_resource(obj_model);
-    commands.insert_resource(light_uniform);
-    commands.insert_resource(LightBuffer(light_buffer));
+    let render_phase_3d = RenderPhase3d {
+        clear_color: Color::GRAY,
+        model_query: world.query_filtered(),
+        pipeline_query: world.query_filtered(),
+    };
+
+    world.insert_resource(renderer);
+    world.insert_resource(pipeline);
+    world.insert_resource(camera);
+    world.insert_resource(CameraController::new(0.05));
+    world.insert_resource(camera_uniform);
+    world.insert_resource(CameraBuffer(camera_buffer));
+    world
+        .spawn()
+        .insert(obj_model)
+        .insert(InstanceCount(instances.len()))
+        .insert(LightModel);
+    world.insert_resource(Instances(instances));
+    world.insert_resource(depth_pass);
+    world.insert_resource(ShowDepthBuffer(false));
+    world.insert_resource(light_uniform);
+    world.insert_resource(LightBuffer(light_buffer));
+    world.insert_resource(render_phase_3d)
+}
+
+pub fn render(world: &mut World) {
+    world.resource_scope(|world, renderer: Mut<WgpuRenderer>| {
+        if let Err(e) = renderer.render(world) {
+            log::error!("{e:?}")
+        };
+    });
 }
 
 fn resize(
@@ -286,33 +313,22 @@ fn resize(
     }
 }
 
-fn render(
+fn cursor_moved(
     mut renderer: ResMut<WgpuRenderer>,
-    pipeline: Res<Pipeline>,
-    instances: Res<Instances>,
-    depth_pass: Res<DepthPass>,
-    show_depth_buffer: Res<ShowDepthBuffer>,
-    obj_model: Res<Model>,
+    mut events: EventReader<CursorMoved>,
+    mut render_phase_3d: ResMut<RenderPhase3d>,
 ) {
-    match renderer.render(
-        &pipeline,
-        instances.0.len() as u32,
-        &depth_pass,
-        show_depth_buffer.0,
-        &obj_model,
-    ) {
-        Ok(_) => {}
-        Err(e) => log::error!("{:?}", e),
-    }
-}
-
-fn cursor_moved(mut renderer: ResMut<WgpuRenderer>, mut events: EventReader<CursorMoved>) {
     for event in events.iter() {
         renderer.clear_color = wgpu::Color {
             r: event.position.x as f64 / renderer.size.width as f64,
             g: event.position.y as f64 / renderer.size.height as f64,
             ..renderer.clear_color
         };
+        render_phase_3d.clear_color = Color::rgb(
+            renderer.clear_color.r as f32,
+            renderer.clear_color.g as f32,
+            renderer.clear_color.b as f32,
+        );
     }
 }
 

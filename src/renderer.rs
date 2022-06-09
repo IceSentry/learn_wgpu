@@ -1,11 +1,11 @@
+use crate::render_phase::{RenderPhase, RenderPhase3d};
 use bevy::{
     math::{Mat3, Mat4, Quat, Vec3},
-    prelude::Color,
+    prelude::{Color, Component, Mut, World},
 };
 use winit::window::Window;
 
-use crate::{depth_pass::DepthPass, light::draw_light_model, model::Model, texture::Texture};
-
+#[derive(Component)]
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
     pub light_pipeline: wgpu::RenderPipeline,
@@ -19,6 +19,7 @@ pub struct Pipeline {
 pub struct Instance {
     pub translation: Vec3,
     pub rotation: Quat,
+    pub scale: Vec3,
 }
 
 #[repr(C)]
@@ -31,8 +32,12 @@ pub struct InstanceRaw {
 impl Instance {
     pub fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
-            model: Mat4::from_rotation_translation(self.rotation, self.translation)
-                .to_cols_array_2d(),
+            model: Mat4::from_scale_rotation_translation(
+                self.scale,
+                self.rotation,
+                self.translation,
+            )
+            .to_cols_array_2d(),
             normal: Mat3::from_quat(self.rotation).to_cols_array_2d(),
         }
     }
@@ -199,84 +204,6 @@ impl WgpuRenderer {
             })
     }
 
-    pub fn create_texture_bind_group(
-        &self,
-        texture: &Texture,
-        binding_offset: u32,
-        label: &str,
-    ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let layout = self
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some(&format!("{label}_layout")),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: binding_offset,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: binding_offset + 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(label),
-            layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: binding_offset,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: binding_offset + 1,
-                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                },
-            ],
-        });
-        (layout, bind_group)
-    }
-
-    pub fn create_camera_bind_group(
-        &self,
-        camera_buffer: &wgpu::Buffer,
-    ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let camera_bind_group_layout =
-            self.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("camera_bind_group_layout"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                });
-
-        let camera_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("camera_bind_group"),
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-        });
-        (camera_bind_group_layout, camera_bind_group)
-    }
-
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
@@ -286,14 +213,7 @@ impl WgpuRenderer {
         }
     }
 
-    pub fn render(
-        &mut self,
-        pipeline: &Pipeline,
-        instance_count: u32,
-        depth_pass: &DepthPass,
-        show_depth_buffer: bool,
-        obj_model: &Model,
-    ) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&self, world: &mut World) -> anyhow::Result<()> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -305,50 +225,13 @@ impl WgpuRenderer {
                 label: Some("Render Encoder"),
             });
 
-        {
-            // TODO extract default render pass
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear_color),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_pass.texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-            });
+        world.resource_scope(|world, mut phase: Mut<RenderPhase3d>| {
+            phase.update(world);
+        });
 
-            render_pass.set_vertex_buffer(1, pipeline.instance_buffer.slice(..));
-
-            render_pass.set_pipeline(&pipeline.light_pipeline);
-            draw_light_model(
-                &mut render_pass,
-                obj_model,
-                &pipeline.camera_bind_group,
-                &pipeline.light_bind_group,
-            );
-
-            render_pass.set_pipeline(&pipeline.render_pipeline);
-            obj_model.draw_instanced(
-                &mut render_pass,
-                0..instance_count,
-                &pipeline.camera_bind_group,
-                &pipeline.light_bind_group,
-            );
-        }
-
-        if show_depth_buffer {
-            depth_pass.render(&view, &mut encoder);
-        }
+        world
+            .resource::<RenderPhase3d>()
+            .render(world, &view, &mut encoder);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();

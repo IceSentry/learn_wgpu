@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use bevy::prelude::Component;
+
 use crate::texture::Texture;
 
 pub trait Vertex {
@@ -40,6 +42,7 @@ impl Vertex for ModelVertex {
     }
 }
 
+#[derive(Component)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
@@ -85,6 +88,7 @@ pub struct Material {
 #[derive(Debug)]
 pub struct Mesh {
     pub name: String,
+    // TODO don't store buffer on mesh
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
