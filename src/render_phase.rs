@@ -6,8 +6,7 @@ use crate::{
     ShowDepthBuffer,
 };
 
-struct _RenderPhases(Vec<Box<dyn RenderPhase>>);
-
+// NOTE: Is this trait necessary?
 pub trait RenderPhase {
     fn update(&mut self, world: &mut World);
     fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut CommandEncoder);
@@ -20,6 +19,7 @@ pub struct InstanceCount(pub usize);
 pub struct LightModel;
 
 pub struct RenderPhase3d {
+    // TODO this could just be a res
     pub clear_color: Color,
     pub model_query: QueryState<(
         &'static Model,
@@ -64,18 +64,16 @@ impl RenderPhase for RenderPhase3d {
                     stencil_ops: None,
                 }),
             });
+
             let pipeline = world.resource::<Pipeline>();
+            let camera_bind_group = &pipeline.camera_bind_group;
+            let light_bind_group = &pipeline.light_bind_group;
 
             for (model, instance_count, ligth_model) in self.model_query.iter_manual(world) {
                 render_pass.set_vertex_buffer(1, pipeline.instance_buffer.slice(..));
                 if ligth_model.is_some() {
                     render_pass.set_pipeline(&pipeline.light_pipeline);
-                    draw_light_model(
-                        &mut render_pass,
-                        model,
-                        &pipeline.camera_bind_group,
-                        &pipeline.light_bind_group,
-                    );
+                    draw_light_model(&mut render_pass, model, camera_bind_group, light_bind_group);
                 }
 
                 if let Some(InstanceCount(instance_count)) = instance_count {
@@ -83,16 +81,12 @@ impl RenderPhase for RenderPhase3d {
                     model.draw_instanced(
                         &mut render_pass,
                         0..*instance_count as u32,
-                        &pipeline.camera_bind_group,
-                        &pipeline.light_bind_group,
+                        camera_bind_group,
+                        light_bind_group,
                     );
                 } else {
                     render_pass.set_pipeline(&pipeline.render_pipeline);
-                    model.draw(
-                        &mut render_pass,
-                        &pipeline.camera_bind_group,
-                        &pipeline.light_bind_group,
-                    );
+                    model.draw(&mut render_pass, camera_bind_group, light_bind_group);
                 }
             }
         }

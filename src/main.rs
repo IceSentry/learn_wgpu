@@ -50,7 +50,7 @@ fn main() {
         .add_startup_system(setup.exclusive_system())
         .add_system(render.exclusive_system())
         .add_system(resize)
-        .add_system(cursor_moved)
+        // .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
         .add_system(move_instances)
@@ -76,10 +76,7 @@ fn setup(world: &mut World) {
         .get_window(window_id)
         .expect("winit window not found");
 
-    let renderer = futures::executor::block_on(WgpuRenderer::new(
-        winit_window,
-        Color::rgba(0.1, 0.2, 0.3, 1.0),
-    ));
+    let renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
 
     let texture = Texture::from_bytes(
         &renderer.device,
@@ -265,7 +262,7 @@ fn setup(world: &mut World) {
     let depth_pass = DepthPass::new(&renderer);
 
     let render_phase_3d = RenderPhase3d {
-        clear_color: Color::GRAY,
+        clear_color: Color::rgba(0.1, 0.2, 0.3, 1.0),
         model_query: world.query_filtered(),
         pipeline_query: world.query_filtered(),
     };
@@ -314,20 +311,15 @@ fn resize(
 }
 
 fn cursor_moved(
-    mut renderer: ResMut<WgpuRenderer>,
+    renderer: Res<WgpuRenderer>,
     mut events: EventReader<CursorMoved>,
     mut render_phase_3d: ResMut<RenderPhase3d>,
 ) {
     for event in events.iter() {
-        renderer.clear_color = wgpu::Color {
-            r: event.position.x as f64 / renderer.size.width as f64,
-            g: event.position.y as f64 / renderer.size.height as f64,
-            ..renderer.clear_color
-        };
         render_phase_3d.clear_color = Color::rgb(
-            renderer.clear_color.r as f32,
-            renderer.clear_color.g as f32,
-            renderer.clear_color.b as f32,
+            event.position.x as f32 / renderer.size.width as f32,
+            event.position.y as f32 / renderer.size.height as f32,
+            render_phase_3d.clear_color.b(),
         );
     }
 }

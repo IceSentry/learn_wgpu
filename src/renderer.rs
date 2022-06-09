@@ -1,10 +1,11 @@
 use crate::render_phase::{RenderPhase, RenderPhase3d};
 use bevy::{
     math::{Mat3, Mat4, Quat, Vec3},
-    prelude::{Color, Component, Mut, World},
+    prelude::{Component, Mut, World},
 };
 use winit::window::Window;
 
+// TODO add these separately to the ECS and query them on demand
 #[derive(Component)]
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
@@ -103,11 +104,10 @@ pub struct WgpuRenderer {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
-    pub clear_color: wgpu::Color,
 }
 
 impl WgpuRenderer {
-    pub async fn new(window: &Window, clear_color: Color) -> Self {
+    pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::all());
@@ -148,12 +148,6 @@ impl WgpuRenderer {
             queue,
             config,
             size,
-            clear_color: wgpu::Color {
-                r: clear_color.r() as f64,
-                g: clear_color.g() as f64,
-                b: clear_color.b() as f64,
-                a: clear_color.a() as f64,
-            },
         }
     }
 
@@ -227,11 +221,8 @@ impl WgpuRenderer {
 
         world.resource_scope(|world, mut phase: Mut<RenderPhase3d>| {
             phase.update(world);
+            phase.render(world, &view, &mut encoder);
         });
-
-        world
-            .resource::<RenderPhase3d>()
-            .render(world, &view, &mut encoder);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
