@@ -1,5 +1,5 @@
 use bevy::{
-    math::{Mat4, Quat, Vec3},
+    math::{Mat3, Mat4, Quat, Vec3},
     prelude::Color,
 };
 use winit::window::Window;
@@ -25,6 +25,7 @@ pub struct Instance {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
     model: [[f32; 4]; 4],
+    normal: [[f32; 3]; 3],
 }
 
 impl Instance {
@@ -32,6 +33,7 @@ impl Instance {
         InstanceRaw {
             model: Mat4::from_rotation_translation(self.rotation, self.translation)
                 .to_cols_array_2d(),
+            normal: Mat3::from_quat(self.rotation).to_cols_array_2d(),
         }
     }
 }
@@ -48,6 +50,7 @@ impl InstanceRaw {
             // for each vec4. We'll have to reassemble the mat4 in
             // the shader.
             attributes: &[
+                // model
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 5,
@@ -67,6 +70,22 @@ impl InstanceRaw {
                     offset: std::mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
+                },
+                // normal
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                    shader_location: 9,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 19]>() as wgpu::BufferAddress,
+                    shader_location: 10,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 22]>() as wgpu::BufferAddress,
+                    shader_location: 11,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
             ],
         }

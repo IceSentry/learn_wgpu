@@ -27,7 +27,7 @@ fn vertex(
     let scale = 0.25;
     var out: VertexOutput;
     out.clip_position = camera.view_proj * vec4<f32>(in.position * scale + light.position, 1.0);
-    out.color = light.color;
+    out.color = vec3<f32>(light.color[0], light.color[1], light.color[2]);
     return out;
 }
 
