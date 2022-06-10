@@ -114,14 +114,11 @@ impl Texture {
     }
 }
 
-pub fn create_texture_bind_group(
-    renderer: &WgpuRenderer,
-    texture: &Texture,
-) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
-    let layout = renderer
+pub fn bind_group_layout(renderer: &WgpuRenderer) -> wgpu::BindGroupLayout {
+    renderer
         .device
         .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("diffuse_bind_group_layout"),
+            label: Some("texture_bind_group_layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -140,23 +137,26 @@ pub fn create_texture_bind_group(
                     count: None,
                 },
             ],
-        });
+        })
+}
 
-    let bind_group = renderer
-        .device
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("diffuse_bind_group"),
-            layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                },
-            ],
-        });
-    (layout, bind_group)
+pub fn bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    texture: &Texture,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("texture_bind_group"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&texture.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&texture.sampler),
+            },
+        ],
+    })
 }

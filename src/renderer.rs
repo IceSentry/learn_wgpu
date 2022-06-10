@@ -10,11 +10,7 @@ use winit::window::Window;
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
     pub light_pipeline: wgpu::RenderPipeline,
-    pub instance_buffer: wgpu::Buffer,
-    pub texture_bind_group: wgpu::BindGroup,
-    pub texture_bind_group_layout: wgpu::BindGroupLayout,
     pub camera_bind_group: wgpu::BindGroup,
-    pub light_bind_group: wgpu::BindGroup,
 }
 
 pub struct Instance {

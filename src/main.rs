@@ -8,7 +8,7 @@ use bevy::{
 use camera::{Camera, CameraController, CameraUniform};
 use depth_pass::DepthPass;
 use light::LightUniform;
-use render_phase::{InstanceCount, LightModel, RenderPhase3d};
+use render_phase::{InstanceBuffer, InstanceCount, LightBindGroup, LightModel, RenderPhase3d};
 use renderer::{Instance, Pipeline, WgpuRenderer};
 use texture::Texture;
 use wgpu::util::DeviceExt;
@@ -48,6 +48,8 @@ fn main() {
         .add_plugin(WinitPlugin)
         .add_plugin(InputPlugin::default())
         .add_startup_system(setup.exclusive_system())
+        .add_startup_system_to_stage(StartupStage::PostStartup, spawn_instances)
+        .add_startup_system_to_stage(StartupStage::PostStartup, spawn_light)
         .add_system(render.exclusive_system())
         .add_system(resize)
         // .add_system(cursor_moved)
@@ -78,14 +80,6 @@ fn setup(world: &mut World) {
 
     let renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
 
-    let texture = Texture::from_bytes(
-        &renderer.device,
-        &renderer.queue,
-        &resources::load_bytes("happy-tree.png").expect("failed to load texture"),
-        "happy-tree.png",
-    )
-    .expect("failed to create texture");
-
     let width = renderer.config.width as f32;
     let height = renderer.config.height as f32;
     let camera = Camera {
@@ -108,6 +102,136 @@ fn setup(world: &mut World) {
             contents: bytemuck::cast_slice(&[camera_uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
+
+    let (camera_bind_group_layout, camera_bind_group) =
+        camera::create_camera_bind_group(&renderer, &camera_buffer);
+
+    let render_pipeline_layout =
+        renderer
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[
+                    &texture::bind_group_layout(&renderer),
+                    &camera_bind_group_layout,
+                    &light::bind_group_layout(&renderer.device),
+                ],
+                push_constant_ranges: &[],
+            });
+
+    let render_pipeline = renderer.create_render_pipeline(
+        "Render Pipeline",
+        wgpu::ShaderModuleDescriptor {
+            label: Some("Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        },
+        &render_pipeline_layout,
+        &[model::ModelVertex::layout(), InstanceRaw::layout()],
+        Some(wgpu::DepthStencilState {
+            format: Texture::DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+    );
+
+    let light_render_pipeline = {
+        let layout = renderer
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Light Pipeline Layout"),
+                bind_group_layouts: &[
+                    &camera_bind_group_layout,
+                    &light::bind_group_layout(&renderer.device),
+                ],
+                push_constant_ranges: &[],
+            });
+        let shader = wgpu::ShaderModuleDescriptor {
+            label: Some("Light Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
+        };
+        renderer.create_render_pipeline(
+            "Light Render Pipeline",
+            shader,
+            &layout,
+            &[ModelVertex::layout()],
+            Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+        )
+    };
+
+    let pipeline = Pipeline {
+        render_pipeline,
+        camera_bind_group,
+        light_pipeline: light_render_pipeline,
+    };
+
+    let depth_pass = DepthPass::new(&renderer);
+
+    let render_phase_3d = RenderPhase3d::from_world(world);
+
+    world.insert_resource(renderer);
+    world.insert_resource(pipeline);
+    world.insert_resource(camera);
+    world.insert_resource(CameraController::new(0.05));
+    world.insert_resource(camera_uniform);
+    world.insert_resource(CameraBuffer(camera_buffer));
+    world.insert_resource(depth_pass);
+    world.insert_resource(ShowDepthBuffer(false));
+    world.insert_resource(render_phase_3d)
+}
+
+fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
+    // TODO consider using bevy assets to load stuff
+    let obj_model = futures::executor::block_on(resources::load_model(
+        "cube.obj",
+        &renderer.device,
+        &renderer.queue,
+        &texture::bind_group_layout(&renderer),
+    ))
+    .expect("failed to load obj");
+
+    let light_uniform = LightUniform::new(LIGHT_POSITION, Color::WHITE);
+
+    let light_buffer = renderer
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Light VB"),
+            contents: bytemuck::cast_slice(&[light_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+    let light_bind_group = renderer
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &light::bind_group_layout(&renderer.device),
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: light_buffer.as_entire_binding(),
+            }],
+            label: None,
+        });
+
+    commands.spawn().insert(obj_model).insert(LightModel);
+    commands.insert_resource(light_uniform);
+    commands.insert_resource(LightBuffer(light_buffer));
+    commands.insert_resource(LightBindGroup(light_bind_group));
+}
+
+fn spawn_instances(mut commands: Commands, renderer: Res<WgpuRenderer>) {
+    let obj_model = futures::executor::block_on(resources::load_model(
+        MODEL_NAME,
+        &renderer.device,
+        &renderer.queue,
+        &texture::bind_group_layout(&renderer),
+    ))
+    .expect("failed to load obj");
 
     let mut instances: Vec<_> = Vec::new();
     for z in 0..NUM_INSTANCES_PER_ROW {
@@ -132,88 +256,6 @@ fn setup(world: &mut World) {
 
     let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
 
-    let light_uniform = LightUniform::new(LIGHT_POSITION, Color::WHITE);
-
-    let light_buffer = renderer
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Light VB"),
-            contents: bytemuck::cast_slice(&[light_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-    let light_bind_group_layout =
-        renderer
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: None,
-            });
-
-    let light_bind_group = renderer
-        .device
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &light_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: light_buffer.as_entire_binding(),
-            }],
-            label: None,
-        });
-
-    let (texture_bind_group_layout, texture_bind_group) =
-        texture::create_texture_bind_group(&renderer, &texture);
-
-    let (camera_bind_group_layout, camera_bind_group) =
-        camera::create_camera_bind_group(&renderer, &camera_buffer);
-
-    let render_pipeline_layout =
-        renderer
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[
-                    &texture_bind_group_layout,
-                    &camera_bind_group_layout,
-                    &light_bind_group_layout,
-                ],
-                push_constant_ranges: &[],
-            });
-
-    let obj_model = futures::executor::block_on(resources::load_model(
-        MODEL_NAME,
-        &renderer.device,
-        &renderer.queue,
-        &texture_bind_group_layout,
-    ))
-    .expect("failed to load obj");
-
-    let render_pipeline = renderer.create_render_pipeline(
-        "Render Pipeline",
-        wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
-        },
-        &render_pipeline_layout,
-        &[model::ModelVertex::layout(), InstanceRaw::layout()],
-        Some(wgpu::DepthStencilState {
-            format: Texture::DEPTH_FORMAT,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-    );
-
     let instance_buffer = renderer
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -222,68 +264,12 @@ fn setup(world: &mut World) {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
 
-    let light_render_pipeline = {
-        let layout = renderer
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Light Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-        let shader = wgpu::ShaderModuleDescriptor {
-            label: Some("Light Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
-        };
-        renderer.create_render_pipeline(
-            "Light Render Pipeline",
-            shader,
-            &layout,
-            &[ModelVertex::layout()],
-            Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-        )
-    };
-
-    let pipeline = Pipeline {
-        render_pipeline,
-        instance_buffer,
-        texture_bind_group,
-        texture_bind_group_layout,
-        camera_bind_group,
-        light_bind_group,
-        light_pipeline: light_render_pipeline,
-    };
-
-    let depth_pass = DepthPass::new(&renderer);
-
-    let render_phase_3d = RenderPhase3d {
-        clear_color: Color::rgba(0.1, 0.2, 0.3, 1.0),
-        model_query: world.query_filtered(),
-        pipeline_query: world.query_filtered(),
-    };
-
-    world.insert_resource(renderer);
-    world.insert_resource(pipeline);
-    world.insert_resource(camera);
-    world.insert_resource(CameraController::new(0.05));
-    world.insert_resource(camera_uniform);
-    world.insert_resource(CameraBuffer(camera_buffer));
-    world
+    commands
         .spawn()
         .insert(obj_model)
         .insert(InstanceCount(instances.len()))
-        .insert(LightModel);
-    world.insert_resource(Instances(instances));
-    world.insert_resource(depth_pass);
-    world.insert_resource(ShowDepthBuffer(false));
-    world.insert_resource(light_uniform);
-    world.insert_resource(LightBuffer(light_buffer));
-    world.insert_resource(render_phase_3d)
+        .insert(InstanceBuffer(instance_buffer));
+    commands.insert_resource(Instances(instances));
 }
 
 pub fn render(world: &mut World) {
@@ -377,10 +363,10 @@ fn update_light(
 
 fn move_instances(
     renderer: Res<WgpuRenderer>,
-    pipeline: Res<Pipeline>,
     mut instances: ResMut<Instances>,
     time: Res<Time>,
     mut wave: Local<Wave>,
+    instance_buffer: Query<&InstanceBuffer>,
 ) {
     wave.offset += time.delta_seconds() * wave.frequency;
 
@@ -390,7 +376,7 @@ fn move_instances(
 
     let data: Vec<_> = instances.0.iter().map(Instance::to_raw).collect();
     renderer.queue.write_buffer(
-        &pipeline.instance_buffer,
+        &instance_buffer.single().0,
         0,
         bytemuck::cast_slice(&data[..]),
     );

@@ -4,7 +4,7 @@ use wgpu::util::DeviceExt;
 // TODO add support for wasm
 use crate::{
     model::{Material, Mesh, Model, ModelVertex},
-    texture::Texture,
+    texture::{self, Texture},
 };
 use std::io::{BufReader, Cursor};
 
@@ -68,20 +68,7 @@ pub async fn load_model(
     let mut materials = Vec::new();
     for m in obj_materials? {
         let diffuse_texture = load_texture(&m.diffuse_texture, device, queue)?;
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                },
-            ],
-        });
+        let bind_group = texture::bind_group(device, layout, &diffuse_texture);
         materials.push(Material {
             name: m.name,
             diffuse_texture,
@@ -90,20 +77,7 @@ pub async fn load_model(
     }
     if materials.is_empty() {
         let diffuse_texture = load_texture("pink.png", device, queue)?;
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                },
-            ],
-        });
+        let bind_group = texture::bind_group(device, layout, &diffuse_texture);
         materials.push(Material {
             name: "default texture".to_string(),
             diffuse_texture,

@@ -18,20 +18,39 @@ pub struct InstanceCount(pub usize);
 #[derive(Component)]
 pub struct LightModel;
 
+#[derive(Component)]
+pub struct InstanceBuffer(pub wgpu::Buffer);
+
+pub struct LightBindGroup(pub wgpu::BindGroup);
+
+#[allow(clippy::type_complexity)]
 pub struct RenderPhase3d {
     // TODO this could just be a res
     pub clear_color: Color,
+    pub light_query: QueryState<&'static Model, bevy::prelude::With<LightModel>>,
     pub model_query: QueryState<(
         &'static Model,
         Option<&'static InstanceCount>,
-        Option<&'static LightModel>,
+        &'static InstanceBuffer,
     )>,
     pub pipeline_query: QueryState<&'static Pipeline>,
+}
+
+impl RenderPhase3d {
+    pub fn from_world(world: &mut World) -> Self {
+        Self {
+            clear_color: Color::rgba(0.1, 0.2, 0.3, 1.0),
+            light_query: world.query_filtered(),
+            model_query: world.query_filtered(),
+            pipeline_query: world.query_filtered(),
+        }
+    }
 }
 
 impl RenderPhase for RenderPhase3d {
     fn update<'w>(&'w mut self, world: &'w mut World) {
         self.model_query.update_archetypes(world);
+        self.light_query.update_archetypes(world);
         self.pipeline_query.update_archetypes(world);
     }
 
@@ -67,14 +86,20 @@ impl RenderPhase for RenderPhase3d {
 
             let pipeline = world.resource::<Pipeline>();
             let camera_bind_group = &pipeline.camera_bind_group;
-            let light_bind_group = &pipeline.light_bind_group;
+            let light_bind_group = world.resource::<LightBindGroup>();
 
-            for (model, instance_count, ligth_model) in self.model_query.iter_manual(world) {
-                render_pass.set_vertex_buffer(1, pipeline.instance_buffer.slice(..));
-                if ligth_model.is_some() {
-                    render_pass.set_pipeline(&pipeline.light_pipeline);
-                    draw_light_model(&mut render_pass, model, camera_bind_group, light_bind_group);
-                }
+            for light_model in self.light_query.iter_manual(world) {
+                render_pass.set_pipeline(&pipeline.light_pipeline);
+                draw_light_model(
+                    &mut render_pass,
+                    light_model,
+                    camera_bind_group,
+                    &light_bind_group.0,
+                );
+            }
+
+            for (model, instance_count, instance_buffer) in self.model_query.iter_manual(world) {
+                render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
 
                 if let Some(InstanceCount(instance_count)) = instance_count {
                     render_pass.set_pipeline(&pipeline.render_pipeline);
@@ -82,11 +107,11 @@ impl RenderPhase for RenderPhase3d {
                         &mut render_pass,
                         0..*instance_count as u32,
                         camera_bind_group,
-                        light_bind_group,
+                        &light_bind_group.0,
                     );
                 } else {
                     render_pass.set_pipeline(&pipeline.render_pipeline);
-                    model.draw(&mut render_pass, camera_bind_group, light_bind_group);
+                    model.draw(&mut render_pass, camera_bind_group, &light_bind_group.0);
                 }
             }
         }

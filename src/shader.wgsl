@@ -1,3 +1,8 @@
+[[group(0), binding(0)]]
+var t_diffuse: texture_2d<f32>;
+[[group(0), binding(1)]]
+var s_diffuse: sampler;
+
 struct CameraUniform {
     view_pos: vec4<f32>;
     view_proj: mat4x4<f32>;
@@ -35,10 +40,7 @@ struct VertexOutput {
     [[location(2)]] world_position: vec3<f32>;
 };
 
-[[group(0), binding(0)]]
-var t_diffuse: texture_2d<f32>;
-[[group(0), binding(1)]]
-var s_diffuse: sampler;
+
 
 [[stage(vertex)]]
 fn vertex(
