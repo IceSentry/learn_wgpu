@@ -53,6 +53,7 @@ const DEPTH_VERTICES: &[Vertex] = &[
 const DEPTH_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
 pub struct DepthPass {
+    // TODO Extract depth texture to a separate component
     pub texture: Texture,
     layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,

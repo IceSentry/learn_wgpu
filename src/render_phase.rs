@@ -57,6 +57,10 @@ impl RenderPhase for RenderPhase3d {
     fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut CommandEncoder) {
         let depth_pass = world.resource::<DepthPass>();
 
+        let pipeline = world.resource::<Pipeline>();
+        let camera_bind_group = &pipeline.camera_bind_group;
+        let light_bind_group = world.resource::<LightBindGroup>();
+
         // opaque phase
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -83,10 +87,6 @@ impl RenderPhase for RenderPhase3d {
                     stencil_ops: None,
                 }),
             });
-
-            let pipeline = world.resource::<Pipeline>();
-            let camera_bind_group = &pipeline.camera_bind_group;
-            let light_bind_group = world.resource::<LightBindGroup>();
 
             for light_model in self.light_query.iter_manual(world) {
                 render_pass.set_pipeline(&pipeline.light_pipeline);

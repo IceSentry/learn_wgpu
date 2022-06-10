@@ -1,12 +1,6 @@
-use std::ops::Range;
-
-use bevy::prelude::Component;
-
 use crate::texture::Texture;
-
-pub trait Vertex {
-    fn layout<'a>() -> wgpu::VertexBufferLayout<'a>;
-}
+use bevy::prelude::Component;
+use std::ops::Range;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -16,8 +10,8 @@ pub struct ModelVertex {
     pub normal: [f32; 3],
 }
 
-impl Vertex for ModelVertex {
-    fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+impl ModelVertex {
+    pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,

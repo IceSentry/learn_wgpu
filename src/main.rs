@@ -14,10 +14,7 @@ use texture::Texture;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
-use crate::{
-    model::{ModelVertex, Vertex},
-    renderer::InstanceRaw,
-};
+use crate::{model::ModelVertex, renderer::InstanceRaw};
 
 mod camera;
 mod depth_pass;
@@ -189,7 +186,7 @@ fn setup(world: &mut World) {
 }
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    // TODO consider using bevy assets to load stuff
+    // TODO make a simpler way to define Meshes and spawn a mesh instead of loading a cube
     let model = futures::executor::block_on(resources::load_model(
         "cube.obj",
         &renderer.device,
@@ -210,6 +207,7 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 }
 
 fn spawn_instances(mut commands: Commands, renderer: Res<WgpuRenderer>) {
+    // TODO consider using bevy assets to load stuff
     let obj_model = futures::executor::block_on(resources::load_model(
         MODEL_NAME,
         &renderer.device,
