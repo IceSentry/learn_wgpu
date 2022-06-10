@@ -3,7 +3,7 @@ use wgpu::util::DeviceExt;
 use crate::model::{Mesh, ModelVertex};
 
 #[derive(Debug, Copy, Clone)]
-pub struct Box {
+pub struct Cube {
     pub min_x: f32,
     pub max_x: f32,
 
@@ -14,9 +14,9 @@ pub struct Box {
     pub max_z: f32,
 }
 
-impl Box {
-    pub fn new(x_length: f32, y_length: f32, z_length: f32) -> Box {
-        Box {
+impl Cube {
+    pub fn new(x_length: f32, y_length: f32, z_length: f32) -> Cube {
+        Cube {
             max_x: x_length / 2.0,
             min_x: -x_length / 2.0,
             max_y: y_length / 2.0,

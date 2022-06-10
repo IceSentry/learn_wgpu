@@ -49,7 +49,7 @@ impl Light {
     pub fn bind_group(&self, device: &wgpu::Device) -> (wgpu::BindGroup, wgpu::Buffer) {
         let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Light VB"),
-            contents: bytemuck::cast_slice(&[self.clone()]),
+            contents: bytemuck::cast_slice(&[*self]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 

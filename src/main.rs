@@ -8,6 +8,7 @@ use bevy::{
 use camera::{Camera, CameraController, CameraUniform};
 use depth_pass::DepthPass;
 use light::Light;
+use model::Model;
 use render_phase::{InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d};
 use renderer::{Instance, Pipeline, WgpuRenderer};
 use texture::Texture;
@@ -187,14 +188,12 @@ fn setup(world: &mut World) {
 }
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    // TODO make a simpler way to define Meshes and spawn a mesh instead of loading a cube
-    let model = futures::executor::block_on(resources::load_model(
-        "cube.obj",
-        &renderer.device,
-        &renderer.queue,
-        &texture::bind_group_layout(&renderer),
-    ))
-    .expect("failed to load obj");
+    let cube = shapes::Cube::new(1.0, 1.0, 1.0);
+    let mesh = cube.mesh(&renderer.device);
+    let model = Model {
+        meshes: vec![mesh],
+        materials: vec![],
+    };
 
     let light = Light::new(LIGHT_POSITION, Color::WHITE);
     let (light_bind_group, light_buffer) = light.bind_group(&renderer.device);
