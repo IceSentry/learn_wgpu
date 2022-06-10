@@ -29,6 +29,40 @@ impl Light {
             _padding2: 0,
         }
     }
+
+    pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: None,
+        })
+    }
+
+    pub fn bind_group(&self, device: &wgpu::Device) -> (wgpu::BindGroup, wgpu::Buffer) {
+        let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Light VB"),
+            contents: bytemuck::cast_slice(&[self.clone()]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &Light::bind_group_layout(device),
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: light_buffer.as_entire_binding(),
+            }],
+            label: None,
+        });
+        (bind_group, light_buffer)
+    }
 }
 
 fn draw_light_mesh<'a>(
@@ -85,38 +119,4 @@ fn draw_light_model_instanced<'a>(
             light_bind_group,
         );
     }
-}
-
-pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }],
-        label: None,
-    })
-}
-
-pub fn bind_group(device: &wgpu::Device, light_uniform: Light) -> (wgpu::BindGroup, wgpu::Buffer) {
-    let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Light VB"),
-        contents: bytemuck::cast_slice(&[light_uniform]),
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        layout: &bind_group_layout(device),
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: light_buffer.as_entire_binding(),
-        }],
-        label: None,
-    });
-    (bind_group, light_buffer)
 }

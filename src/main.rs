@@ -23,6 +23,7 @@ mod model;
 mod render_phase;
 mod renderer;
 mod resources;
+mod shapes;
 mod texture;
 
 const NUM_INSTANCES_PER_ROW: u32 = 10;
@@ -112,7 +113,7 @@ fn setup(world: &mut World) {
                 bind_group_layouts: &[
                     &texture::bind_group_layout(&renderer),
                     &camera_bind_group_layout,
-                    &light::bind_group_layout(&renderer.device),
+                    &Light::bind_group_layout(&renderer.device),
                 ],
                 push_constant_ranges: &[],
             });
@@ -141,7 +142,7 @@ fn setup(world: &mut World) {
                 label: Some("Light Pipeline Layout"),
                 bind_group_layouts: &[
                     &camera_bind_group_layout,
-                    &light::bind_group_layout(&renderer.device),
+                    &Light::bind_group_layout(&renderer.device),
                 ],
                 push_constant_ranges: &[],
             });
@@ -196,7 +197,7 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     .expect("failed to load obj");
 
     let light = Light::new(LIGHT_POSITION, Color::WHITE);
-    let (light_bind_group, light_buffer) = light::bind_group(&renderer.device, light);
+    let (light_bind_group, light_buffer) = light.bind_group(&renderer.device);
 
     commands
         .spawn()

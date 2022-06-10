@@ -67,8 +67,8 @@ impl DepthPass {
     pub fn new(renderer: &WgpuRenderer) -> Self {
         let texture =
             Texture::create_depth_texture(&renderer.device, &renderer.config, "depth_texture");
-        let layout = DepthPass::create_bind_group_layout(&renderer.device);
-        let bind_group = DepthPass::create_bind_group(&renderer.device, &layout, &texture);
+        let layout = DepthPass::bind_group_layout(&renderer.device);
+        let bind_group = DepthPass::bind_group(&renderer.device, &layout, &texture);
 
         let vertex_buffer = renderer
             .device
@@ -118,7 +118,7 @@ impl DepthPass {
 
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.texture = Texture::create_depth_texture(device, config, "depth_texture");
-        self.bind_group = DepthPass::create_bind_group(device, &self.layout, &self.texture);
+        self.bind_group = DepthPass::bind_group(device, &self.layout, &self.texture);
     }
 
     pub fn render(&self, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
@@ -141,7 +141,7 @@ impl DepthPass {
         render_pass.draw_indexed(0..self.num_depth_indices, 0, 0..1);
     }
 
-    fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Depth Pass Layout"),
             entries: &[
@@ -165,7 +165,7 @@ impl DepthPass {
         })
     }
 
-    fn create_bind_group(
+    fn bind_group(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         texture: &Texture,
