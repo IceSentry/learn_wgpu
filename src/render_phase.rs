@@ -2,7 +2,10 @@ use bevy::prelude::{Color, Component, QueryState, World};
 use wgpu::CommandEncoder;
 
 use crate::{
-    depth_pass::DepthPass, light::draw_light_model, model::Model, renderer::Pipeline,
+    depth_pass::DepthPass,
+    light::{draw_light_model, Light},
+    model::Model,
+    renderer::Pipeline,
     ShowDepthBuffer,
 };
 
@@ -14,20 +17,17 @@ pub trait RenderPhase {
 
 #[derive(Component)]
 pub struct InstanceCount(pub usize);
-
-#[derive(Component)]
-pub struct LightModel;
-
 #[derive(Component)]
 pub struct InstanceBuffer(pub wgpu::Buffer);
 
+#[derive(Component)]
 pub struct LightBindGroup(pub wgpu::BindGroup);
 
 #[allow(clippy::type_complexity)]
 pub struct RenderPhase3d {
     // TODO this could just be a res
     pub clear_color: Color,
-    pub light_query: QueryState<&'static Model, bevy::prelude::With<LightModel>>,
+    pub light_query: QueryState<&'static Model, bevy::prelude::With<Light>>,
     pub model_query: QueryState<(
         &'static Model,
         Option<&'static InstanceCount>,

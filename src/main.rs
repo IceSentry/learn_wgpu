@@ -7,8 +7,8 @@ use bevy::{
 };
 use camera::{Camera, CameraController, CameraUniform};
 use depth_pass::DepthPass;
-use light::LightUniform;
-use render_phase::{InstanceBuffer, InstanceCount, LightBindGroup, LightModel, RenderPhase3d};
+use light::Light;
+use render_phase::{InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d};
 use renderer::{Instance, Pipeline, WgpuRenderer};
 use texture::Texture;
 use wgpu::util::DeviceExt;
@@ -63,6 +63,7 @@ fn main() {
 }
 
 struct CameraBuffer(wgpu::Buffer);
+#[derive(Component)]
 struct LightBuffer(wgpu::Buffer);
 struct Instances(Vec<Instance>);
 pub struct ShowDepthBuffer(bool);
@@ -189,7 +190,7 @@ fn setup(world: &mut World) {
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     // TODO consider using bevy assets to load stuff
-    let obj_model = futures::executor::block_on(resources::load_model(
+    let model = futures::executor::block_on(resources::load_model(
         "cube.obj",
         &renderer.device,
         &renderer.queue,
@@ -197,30 +198,14 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     ))
     .expect("failed to load obj");
 
-    let light_uniform = LightUniform::new(LIGHT_POSITION, Color::WHITE);
+    let light = Light::new(LIGHT_POSITION, Color::WHITE);
+    let (light_bind_group, light_buffer) = light::bind_group(&renderer.device, light);
 
-    let light_buffer = renderer
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Light VB"),
-            contents: bytemuck::cast_slice(&[light_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-    let light_bind_group = renderer
-        .device
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &light::bind_group_layout(&renderer.device),
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: light_buffer.as_entire_binding(),
-            }],
-            label: None,
-        });
-
-    commands.spawn().insert(obj_model).insert(LightModel);
-    commands.insert_resource(light_uniform);
-    commands.insert_resource(LightBuffer(light_buffer));
+    commands
+        .spawn()
+        .insert(light)
+        .insert(model)
+        .insert(LightBuffer(light_buffer));
     commands.insert_resource(LightBindGroup(light_bind_group));
 }
 
@@ -347,18 +332,20 @@ fn update_camera(
 
 fn update_light(
     renderer: Res<WgpuRenderer>,
-    mut light_uniform: ResMut<LightUniform>,
-    light_buffer: Res<LightBuffer>,
+    mut query: Query<(&mut Light, &LightBuffer)>,
     time: Res<Time>,
 ) {
-    let old_position = light_uniform.position;
-    light_uniform.position =
-        Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * time.delta_seconds())
-            .mul_vec3(old_position.into())
-            .to_array();
-    renderer
-        .queue
-        .write_buffer(&light_buffer.0, 0, bytemuck::cast_slice(&[*light_uniform]));
+    for (mut light, light_buffer) in query.iter_mut() {
+        let old_position = light.position;
+        light.position =
+            Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * time.delta_seconds())
+                .mul_vec3(old_position.into())
+                .to_array();
+
+        renderer
+            .queue
+            .write_buffer(&light_buffer.0, 0, bytemuck::cast_slice(&[*light]));
+    }
 }
 
 fn move_instances(

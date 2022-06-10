@@ -156,7 +156,6 @@ impl WgpuRenderer {
         depth_stencil: Option<wgpu::DepthStencilState>,
     ) -> wgpu::RenderPipeline {
         let shader = self.device.create_shader_module(&shader);
-
         self.device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),

@@ -1,13 +1,17 @@
 use std::ops::Range;
 
-use bevy::{math::Vec3, prelude::Color};
+use bevy::{
+    math::Vec3,
+    prelude::{Color, Component},
+};
+use wgpu::util::DeviceExt;
 
 use crate::model::{Mesh, Model};
 
 // main.rs
 #[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct LightUniform {
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Component)]
+pub struct Light {
     pub position: [f32; 3],
     // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
     _padding: u32,
@@ -16,7 +20,7 @@ pub struct LightUniform {
     _padding2: u32,
 }
 
-impl LightUniform {
+impl Light {
     pub fn new(position: Vec3, color: Color) -> Self {
         Self {
             position: position.to_array(),
@@ -97,4 +101,22 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         }],
         label: None,
     })
+}
+
+pub fn bind_group(device: &wgpu::Device, light_uniform: Light) -> (wgpu::BindGroup, wgpu::Buffer) {
+    let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Light VB"),
+        contents: bytemuck::cast_slice(&[light_uniform]),
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &bind_group_layout(device),
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: light_buffer.as_entire_binding(),
+        }],
+        label: None,
+    });
+    (bind_group, light_buffer)
 }
