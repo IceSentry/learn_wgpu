@@ -31,10 +31,13 @@ mod texture;
 
 const NUM_INSTANCES_PER_ROW: u32 = 1;
 const SPACE_BETWEEN: f32 = 3.0;
-const LIGHT_POSITION: Vec3 = const_vec3!([3.0, 2.0, 0.0]);
-const MODEL_NAME: &str = "cube.obj";
-const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 3.0, 8.0]);
-const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
+const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
+const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
+
+const MODEL_NAME: &str = "teapot.obj";
+const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+// const MODEL_NAME: &str = "bunny.obj";
+// const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 
 // TODO figure out how to draw lines
 // TODO draw normals
@@ -63,10 +66,10 @@ fn main() {
         .add_startup_system_to_stage(StartupStage::PostStartup, init_depth_pass)
         .add_system(render.exclusive_system())
         .add_system(resize)
-        .add_system(cursor_moved)
+        // .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
-        // .add_system(move_instances)
+        .add_system(move_instances)
         .add_system(update_show_depth)
         .add_system(update_light)
         .add_system(update_camera_buffer)

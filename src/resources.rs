@@ -112,15 +112,44 @@ pub async fn load_model(
                 })
                 .collect();
 
-            // compute_flat_normals
-            if m.mesh.texcoords.is_empty() && m.mesh.indices.is_empty() {
-                log::info!("flat normals");
-                for v in vertices.chunks_exact_mut(3) {
-                    if let [v1, v2, v3] = v {
-                        let normal = face_normal(v1.position, v2.position, v3.position);
-                        v1.normal = normal;
-                        v2.normal = normal;
-                        v3.normal = normal;
+            // compute normals
+            if m.mesh.normals.is_empty() {
+                if m.mesh.indices.is_empty() {
+                    for v in vertices.chunks_exact_mut(3) {
+                        if let [v1, v2, v3] = v {
+                            let normal = face_normal(v1.position, v2.position, v3.position);
+                            v1.normal = normal;
+                            v2.normal = normal;
+                            v3.normal = normal;
+                        }
+                    }
+                } else {
+                    for v in vertices.iter_mut() {
+                        v.normal = [0.0, 0.0, 0.0];
+                    }
+
+                    for i in m.mesh.indices.chunks_exact(3) {
+                        if let [i1, i2, i3] = i {
+                            let v_a = Vec3::from(vertices[*i1 as usize].position);
+                            let v_b = Vec3::from(vertices[*i2 as usize].position);
+                            let v_c = Vec3::from(vertices[*i3 as usize].position);
+
+                            let edge_ab = v_b - v_a;
+                            let edge_ac = v_c - v_a;
+
+                            let normal = edge_ab.cross(edge_ac);
+
+                            vertices[*i1 as usize].normal =
+                                (Vec3::from(vertices[*i1 as usize].normal) + normal).to_array();
+                            vertices[*i2 as usize].normal =
+                                (Vec3::from(vertices[*i2 as usize].normal) + normal).to_array();
+                            vertices[*i3 as usize].normal =
+                                (Vec3::from(vertices[*i3 as usize].normal) + normal).to_array();
+                        }
+                    }
+
+                    for v in vertices.iter_mut() {
+                        v.normal = Vec3::from(v.normal).normalize().to_array();
                     }
                 }
             }
