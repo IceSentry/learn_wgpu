@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::model::{Mesh, ModelVertex};
+use crate::model::{ModelMesh, ModelVertex};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Cube {
@@ -26,7 +26,7 @@ impl Cube {
         }
     }
 
-    pub fn mesh(&self, device: &wgpu::Device) -> Mesh {
+    pub fn mesh(&self, device: &wgpu::Device) -> ModelMesh {
         #[rustfmt::skip]
         let vertices = vec![
             // Top
@@ -87,7 +87,7 @@ impl Cube {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        Mesh {
+        ModelMesh {
             name: "".to_string(),
             vertex_buffer,
             index_buffer,

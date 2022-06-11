@@ -38,7 +38,7 @@ impl ModelVertex {
 
 #[derive(Component)]
 pub struct Model {
-    pub meshes: Vec<Mesh>,
+    pub meshes: Vec<ModelMesh>,
     pub materials: Vec<Material>,
 }
 
@@ -81,7 +81,7 @@ pub struct Material {
 }
 
 #[derive(Debug)]
-pub struct Mesh {
+pub struct ModelMesh {
     pub name: String,
     // TODO don't store buffer on mesh
     pub vertex_buffer: wgpu::Buffer,
@@ -90,7 +90,7 @@ pub struct Mesh {
     pub material_id: usize,
 }
 
-impl Mesh {
+impl ModelMesh {
     pub fn draw<'a>(
         &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,

@@ -1,9 +1,9 @@
-use bevy::math::Vec3;
-use wgpu::util::DeviceExt;
+use bevy::math::{Vec2, Vec3};
 
 // TODO add support for wasm
 use crate::{
-    model::{Material, Mesh, Model, ModelVertex},
+    mesh::{Mesh, Vertex},
+    model::{Material, Model, ModelMesh},
     texture::{self, Texture},
 };
 use std::io::{BufReader, Cursor};
@@ -33,11 +33,6 @@ pub fn load_texture(
 ) -> anyhow::Result<Texture> {
     let data = load_bytes(file_name)?;
     Texture::from_bytes(device, queue, &data, file_name)
-}
-
-fn face_normal(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> [f32; 3] {
-    let (a, b, c) = (Vec3::from(a), Vec3::from(b), Vec3::from(c));
-    (b - a).cross(c - a).normalize().into()
 }
 
 pub async fn load_model(
@@ -88,88 +83,44 @@ pub async fn load_model(
     let meshes: Vec<_> = models
         .into_iter()
         .map(|m| {
-            let mut vertices: Vec<_> = (0..m.mesh.positions.len() / 3)
-                .map(|i| ModelVertex {
-                    position: [
+            let vertices: Vec<_> = (0..m.mesh.positions.len() / 3)
+                .map(|i| Vertex {
+                    position: Vec3::new(
                         m.mesh.positions[i * 3],
                         m.mesh.positions[i * 3 + 1],
                         m.mesh.positions[i * 3 + 2],
-                    ],
+                    ),
                     uv: if m.mesh.texcoords.is_empty() {
-                        [1.0, 1.0]
+                        Vec2::new(1.0, 1.0)
                     } else {
-                        [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]]
+                        Vec2::new(m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1])
                     },
                     normal: if m.mesh.normals.is_empty() {
-                        [0.0, 0.0, 0.0]
+                        Vec3::new(0.0, 0.0, 0.0)
                     } else {
-                        [
+                        Vec3::new(
                             m.mesh.normals[i * 3],
                             m.mesh.normals[i * 3 + 1],
                             m.mesh.normals[i * 3 + 2],
-                        ]
+                        )
                     },
                 })
                 .collect();
 
-            // compute normals
+            let mut mesh = Mesh {
+                vertices,
+                indices: Some(m.mesh.indices),
+            };
+
             if m.mesh.normals.is_empty() {
-                if m.mesh.indices.is_empty() {
-                    for v in vertices.chunks_exact_mut(3) {
-                        if let [v1, v2, v3] = v {
-                            let normal = face_normal(v1.position, v2.position, v3.position);
-                            v1.normal = normal;
-                            v2.normal = normal;
-                            v3.normal = normal;
-                        }
-                    }
-                } else {
-                    for v in vertices.iter_mut() {
-                        v.normal = [0.0, 0.0, 0.0];
-                    }
-
-                    for i in m.mesh.indices.chunks_exact(3) {
-                        if let [i1, i2, i3] = i {
-                            let v_a = Vec3::from(vertices[*i1 as usize].position);
-                            let v_b = Vec3::from(vertices[*i2 as usize].position);
-                            let v_c = Vec3::from(vertices[*i3 as usize].position);
-
-                            let edge_ab = v_b - v_a;
-                            let edge_ac = v_c - v_a;
-
-                            let normal = edge_ab.cross(edge_ac);
-
-                            vertices[*i1 as usize].normal =
-                                (Vec3::from(vertices[*i1 as usize].normal) + normal).to_array();
-                            vertices[*i2 as usize].normal =
-                                (Vec3::from(vertices[*i2 as usize].normal) + normal).to_array();
-                            vertices[*i3 as usize].normal =
-                                (Vec3::from(vertices[*i3 as usize].normal) + normal).to_array();
-                        }
-                    }
-
-                    for v in vertices.iter_mut() {
-                        v.normal = Vec3::from(v.normal).normalize().to_array();
-                    }
-                }
+                mesh.compute_normals();
             }
 
-            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{file_name:?} Vertex Buffer")),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{file_name:?} Index Buffer")),
-                contents: bytemuck::cast_slice(&m.mesh.indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
-            Mesh {
+            ModelMesh {
                 name: file_name.to_string(),
-                vertex_buffer,
-                index_buffer,
-                num_elements: m.mesh.indices.len() as u32,
+                vertex_buffer: mesh.get_vertex_buffer(device),
+                index_buffer: mesh.get_index_buffer(device),
+                num_elements: mesh.indices.unwrap().len() as u32,
                 material_id: m.mesh.material_id.unwrap_or(0),
             }
         })

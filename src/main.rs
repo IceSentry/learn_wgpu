@@ -22,6 +22,7 @@ use crate::{model::ModelVertex, renderer::InstanceRaw};
 mod camera;
 mod depth_pass;
 mod light;
+mod mesh;
 mod model;
 mod render_phase;
 mod renderer;

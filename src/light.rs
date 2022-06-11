@@ -6,7 +6,7 @@ use bevy::{
 };
 use wgpu::util::DeviceExt;
 
-use crate::model::{Mesh, Model};
+use crate::model::{Model, ModelMesh};
 
 // main.rs
 #[repr(C)]
@@ -67,7 +67,7 @@ impl Light {
 
 fn draw_light_mesh<'a>(
     render_pass: &mut wgpu::RenderPass<'a>,
-    mesh: &'a Mesh,
+    mesh: &'a ModelMesh,
     camera_bind_group: &'a wgpu::BindGroup,
     light_bind_group: &'a wgpu::BindGroup,
 ) {
@@ -76,7 +76,7 @@ fn draw_light_mesh<'a>(
 
 fn draw_light_mesh_instanced<'a>(
     render_pass: &mut wgpu::RenderPass<'a>,
-    mesh: &'a Mesh,
+    mesh: &'a ModelMesh,
     instances: Range<u32>,
     camera_bind_group: &'a wgpu::BindGroup,
     light_bind_group: &'a wgpu::BindGroup,
