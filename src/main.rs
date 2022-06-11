@@ -9,7 +9,9 @@ use camera::{Camera, CameraController, CameraUniform};
 use depth_pass::DepthPass;
 use light::Light;
 use model::Model;
-use render_phase::{DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d};
+use render_phase::{
+    ClearColor, DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d,
+};
 use renderer::{Instance, Pipeline, WgpuRenderer};
 use texture::Texture;
 use wgpu::util::DeviceExt;
@@ -57,7 +59,7 @@ fn main() {
         .add_startup_system_to_stage(StartupStage::PostStartup, init_depth_pass)
         .add_system(render.exclusive_system())
         .add_system(resize)
-        // .add_system(cursor_moved)
+        .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
         .add_system(move_instances)
@@ -187,7 +189,8 @@ fn setup(world: &mut World) {
     world.insert_resource(camera_uniform);
     world.insert_resource(CameraBuffer(camera_buffer));
     world.insert_resource(ShowDepthBuffer(false));
-    world.insert_resource(render_phase_3d)
+    world.insert_resource(render_phase_3d);
+    world.insert_resource(ClearColor(Color::rgba(0.1, 0.2, 0.3, 1.0)));
 }
 
 fn init_depth_pass(mut commands: Commands, renderer: Res<WgpuRenderer>) {
@@ -301,13 +304,13 @@ fn resize(
 fn cursor_moved(
     renderer: Res<WgpuRenderer>,
     mut events: EventReader<CursorMoved>,
-    mut render_phase_3d: ResMut<RenderPhase3d>,
+    mut clear_color: ResMut<ClearColor>,
 ) {
     for event in events.iter() {
-        render_phase_3d.clear_color = Color::rgb(
+        clear_color.0 = Color::rgb(
             event.position.x as f32 / renderer.size.width as f32,
             event.position.y as f32 / renderer.size.height as f32,
-            render_phase_3d.clear_color.b(),
+            clear_color.0.b(),
         );
     }
 }

@@ -24,13 +24,12 @@ pub struct InstanceBuffer(pub wgpu::Buffer);
 #[derive(Component)]
 pub struct LightBindGroup(pub wgpu::BindGroup);
 
-#[derive(Component)]
 pub struct DepthTexture(pub Texture);
+
+pub struct ClearColor(pub Color);
 
 #[allow(clippy::type_complexity)]
 pub struct RenderPhase3d {
-    // TODO this could just be a res
-    pub clear_color: Color,
     pub light_query: QueryState<&'static Model, bevy::prelude::With<Light>>,
     pub model_query: QueryState<(
         &'static Model,
@@ -43,7 +42,6 @@ pub struct RenderPhase3d {
 impl RenderPhase3d {
     pub fn from_world(world: &mut World) -> Self {
         Self {
-            clear_color: Color::rgba(0.1, 0.2, 0.3, 1.0),
             light_query: world.query_filtered(),
             model_query: world.query_filtered(),
             pipeline_query: world.query_filtered(),
@@ -65,6 +63,7 @@ impl RenderPhase for RenderPhase3d {
         let camera_bind_group = &pipeline.camera_bind_group;
         let light_bind_group = world.resource::<LightBindGroup>();
         let depth_texture = world.resource::<DepthTexture>();
+        let clear_color = world.resource::<ClearColor>();
 
         // opaque phase
         {
@@ -75,10 +74,10 @@ impl RenderPhase for RenderPhase3d {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: self.clear_color.r() as f64,
-                            g: self.clear_color.g() as f64,
-                            b: self.clear_color.b() as f64,
-                            a: self.clear_color.a() as f64,
+                            r: clear_color.0.r() as f64,
+                            g: clear_color.0.g() as f64,
+                            b: clear_color.0.b() as f64,
+                            a: clear_color.0.a() as f64,
                         }),
                         store: true,
                     },
