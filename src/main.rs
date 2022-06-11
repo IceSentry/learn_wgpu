@@ -9,7 +9,7 @@ use camera::{Camera, CameraController, CameraUniform};
 use depth_pass::DepthPass;
 use light::Light;
 use model::Model;
-use render_phase::{InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d};
+use render_phase::{DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d};
 use renderer::{Instance, Pipeline, WgpuRenderer};
 use texture::Texture;
 use wgpu::util::DeviceExt;
@@ -54,6 +54,7 @@ fn main() {
         .add_startup_system(setup.exclusive_system())
         .add_startup_system_to_stage(StartupStage::PostStartup, spawn_instances)
         .add_startup_system_to_stage(StartupStage::PostStartup, spawn_light)
+        .add_startup_system_to_stage(StartupStage::PostStartup, init_depth_pass)
         .add_system(render.exclusive_system())
         .add_system(resize)
         // .add_system(cursor_moved)
@@ -62,6 +63,7 @@ fn main() {
         .add_system(move_instances)
         .add_system(update_show_depth)
         .add_system(update_light)
+        .add_system(update_camera_buffer)
         .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
@@ -176,8 +178,6 @@ fn setup(world: &mut World) {
         light_pipeline: light_render_pipeline,
     };
 
-    let depth_pass = DepthPass::new(&renderer);
-
     let render_phase_3d = RenderPhase3d::from_world(world);
 
     world.insert_resource(renderer);
@@ -186,9 +186,15 @@ fn setup(world: &mut World) {
     world.insert_resource(CameraController::new(0.05));
     world.insert_resource(camera_uniform);
     world.insert_resource(CameraBuffer(camera_buffer));
-    world.insert_resource(depth_pass);
     world.insert_resource(ShowDepthBuffer(false));
     world.insert_resource(render_phase_3d)
+}
+
+fn init_depth_pass(mut commands: Commands, renderer: Res<WgpuRenderer>) {
+    let depth_texture = Texture::create_depth_texture(&renderer.device, &renderer.config);
+    let depth_pass = DepthPass::new(&renderer, &depth_texture);
+    commands.insert_resource(DepthTexture(depth_texture));
+    commands.insert_resource(depth_pass);
 }
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
@@ -267,19 +273,28 @@ pub fn render(world: &mut World) {
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resize(
     mut renderer: ResMut<WgpuRenderer>,
     mut events: EventReader<WindowResized>,
     windows: Res<Windows>,
     mut depth_pass: ResMut<DepthPass>,
+    mut depth_texture: ResMut<DepthTexture>,
+    mut camera_uniform: ResMut<CameraUniform>,
+    mut camera: ResMut<Camera>,
 ) {
     for event in events.iter() {
         let window = windows.get(event.id).expect("window not found");
-        renderer.resize(PhysicalSize {
-            width: window.physical_width(),
-            height: window.physical_height(),
-        });
-        depth_pass.resize(&renderer.device, &renderer.config);
+        let width = window.physical_width();
+        let height = window.physical_height();
+
+        camera.aspect = width as f32 / height as f32;
+        camera_uniform.update_view_proj(&camera);
+
+        renderer.resize(PhysicalSize { width, height });
+
+        depth_texture.0 = Texture::create_depth_texture(&renderer.device, &renderer.config);
+        depth_pass.resize(&renderer.device, &depth_texture.0);
     }
 }
 
@@ -311,10 +326,8 @@ fn update_show_depth(keyboard_input: Res<Input<KeyCode>>, mut draw_depth: ResMut
 fn update_camera(
     mut camera_controller: ResMut<CameraController>,
     keyboard_input: Res<Input<KeyCode>>,
-    renderer: Res<WgpuRenderer>,
     mut camera: ResMut<Camera>,
     mut camera_uniform: ResMut<CameraUniform>,
-    camera_buffer: Res<CameraBuffer>,
 ) {
     camera_controller.is_forward_pressed = keyboard_input.pressed(KeyCode::W);
     camera_controller.is_left_pressed = keyboard_input.pressed(KeyCode::A);
@@ -324,12 +337,20 @@ fn update_camera(
     camera_controller.update_camera(&mut camera);
 
     camera_uniform.update_view_proj(&camera);
+}
 
-    renderer.queue.write_buffer(
-        &camera_buffer.0,
-        0,
-        bytemuck::cast_slice(&[*camera_uniform]),
-    );
+fn update_camera_buffer(
+    renderer: Res<WgpuRenderer>,
+    camera_buffer: Res<CameraBuffer>,
+    camera_uniform: Res<CameraUniform>,
+) {
+    if camera_uniform.is_changed() {
+        renderer.queue.write_buffer(
+            &camera_buffer.0,
+            0,
+            bytemuck::cast_slice(&[*camera_uniform]),
+        );
+    }
 }
 
 fn update_light(

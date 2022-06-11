@@ -1,7 +1,5 @@
 use bevy::prelude::*;
 
-use crate::renderer::WgpuRenderer;
-
 pub struct Camera {
     pub eye: Vec3,
     pub target: Vec3,

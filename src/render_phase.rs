@@ -6,6 +6,7 @@ use crate::{
     light::{draw_light_model, Light},
     model::Model,
     renderer::Pipeline,
+    texture::Texture,
     ShowDepthBuffer,
 };
 
@@ -22,6 +23,9 @@ pub struct InstanceBuffer(pub wgpu::Buffer);
 
 #[derive(Component)]
 pub struct LightBindGroup(pub wgpu::BindGroup);
+
+#[derive(Component)]
+pub struct DepthTexture(pub Texture);
 
 #[allow(clippy::type_complexity)]
 pub struct RenderPhase3d {
@@ -60,6 +64,7 @@ impl RenderPhase for RenderPhase3d {
         let pipeline = world.resource::<Pipeline>();
         let camera_bind_group = &pipeline.camera_bind_group;
         let light_bind_group = world.resource::<LightBindGroup>();
+        let depth_texture = world.resource::<DepthTexture>();
 
         // opaque phase
         {
@@ -79,7 +84,7 @@ impl RenderPhase for RenderPhase3d {
                     },
                 }],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_pass.texture.view,
+                    view: &depth_texture.0.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: true,
