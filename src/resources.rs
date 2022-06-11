@@ -113,7 +113,8 @@ pub async fn load_model(
                 .collect();
 
             // compute_flat_normals
-            if m.mesh.texcoords.is_empty() {
+            if m.mesh.texcoords.is_empty() && m.mesh.indices.is_empty() {
+                log::info!("flat normals");
                 for v in vertices.chunks_exact_mut(3) {
                     if let [v1, v2, v3] = v {
                         let normal = face_normal(v1.position, v2.position, v3.position);

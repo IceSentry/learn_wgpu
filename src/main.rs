@@ -29,12 +29,16 @@ mod resources;
 mod shapes;
 mod texture;
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
+const NUM_INSTANCES_PER_ROW: u32 = 1;
 const SPACE_BETWEEN: f32 = 3.0;
-const LIGHT_POSITION: Vec3 = const_vec3!([4.0, 4.0, 0.0]);
+const LIGHT_POSITION: Vec3 = const_vec3!([3.0, 2.0, 0.0]);
 const MODEL_NAME: &str = "cube.obj";
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 3.0, 8.0]);
-const SCALE: Vec3 = const_vec3!([1., 1., 1.]);
+const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
+
+// TODO figure out how to draw lines
+// TODO draw normals
+// TODO better camera
 
 fn main() {
     env_logger::builder()
@@ -62,7 +66,7 @@ fn main() {
         .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
-        .add_system(move_instances)
+        // .add_system(move_instances)
         .add_system(update_show_depth)
         .add_system(update_light)
         .add_system(update_camera_buffer)
@@ -232,8 +236,8 @@ fn spawn_instances(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     let mut instances: Vec<_> = Vec::new();
     for z in 0..NUM_INSTANCES_PER_ROW {
         for x in 0..NUM_INSTANCES_PER_ROW {
-            let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-            let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
 
             let translation = vec3(x as f32, 0.0, z as f32);
             let rotation = if translation == Vec3::ZERO {
