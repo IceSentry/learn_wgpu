@@ -42,6 +42,11 @@ fn main() {
         .init();
 
     App::new()
+        .insert_resource(WindowDescriptor {
+            width: 800.0,
+            height: 600.0,
+            ..default()
+        })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
@@ -103,8 +108,7 @@ fn setup(world: &mut World) {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-    let (camera_bind_group_layout, camera_bind_group) =
-        camera::create_camera_bind_group(&renderer, &camera_buffer);
+    let camera_bind_group = camera::create_camera_bind_group(&renderer.device, &camera_buffer);
 
     let render_pipeline_layout =
         renderer
@@ -112,8 +116,8 @@ fn setup(world: &mut World) {
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
-                    &texture::bind_group_layout(&renderer),
-                    &camera_bind_group_layout,
+                    &texture::bind_group_layout(&renderer.device),
+                    &camera::bind_group_layout(&renderer.device),
                     &Light::bind_group_layout(&renderer.device),
                 ],
                 push_constant_ranges: &[],
@@ -142,7 +146,7 @@ fn setup(world: &mut World) {
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Light Pipeline Layout"),
                 bind_group_layouts: &[
-                    &camera_bind_group_layout,
+                    &camera::bind_group_layout(&renderer.device),
                     &Light::bind_group_layout(&renderer.device),
                 ],
                 push_constant_ranges: &[],
@@ -212,7 +216,7 @@ fn spawn_instances(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         MODEL_NAME,
         &renderer.device,
         &renderer.queue,
-        &texture::bind_group_layout(&renderer),
+        &texture::bind_group_layout(&renderer.device),
     ))
     .expect("failed to load obj");
 
