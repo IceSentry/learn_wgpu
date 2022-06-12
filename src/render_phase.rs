@@ -28,6 +28,8 @@ pub struct DepthTexture(pub Texture);
 
 pub struct ClearColor(pub Color);
 
+pub struct CameraBindGroup(pub wgpu::BindGroup);
+
 #[allow(clippy::type_complexity)]
 pub struct RenderPhase3d {
     pub light_query: QueryState<&'static Model, bevy::prelude::With<Light>>,
@@ -60,7 +62,7 @@ impl RenderPhase for RenderPhase3d {
         let depth_pass = world.resource::<DepthPass>();
 
         let pipeline = world.resource::<Pipeline>();
-        let camera_bind_group = &pipeline.camera_bind_group;
+        let camera_bind_group = world.resource::<CameraBindGroup>();
         let light_bind_group = world.resource::<LightBindGroup>();
         let depth_texture = world.resource::<DepthTexture>();
         let clear_color = world.resource::<ClearColor>();
@@ -97,7 +99,7 @@ impl RenderPhase for RenderPhase3d {
                 draw_light_model(
                     &mut render_pass,
                     light_model,
-                    camera_bind_group,
+                    &camera_bind_group.0,
                     &light_bind_group.0,
                 );
             }
@@ -110,12 +112,12 @@ impl RenderPhase for RenderPhase3d {
                     model.draw_instanced(
                         &mut render_pass,
                         0..*instance_count as u32,
-                        camera_bind_group,
+                        &camera_bind_group.0,
                         &light_bind_group.0,
                     );
                 } else {
                     render_pass.set_pipeline(&pipeline.render_pipeline);
-                    model.draw(&mut render_pass, camera_bind_group, &light_bind_group.0);
+                    model.draw(&mut render_pass, &camera_bind_group.0, &light_bind_group.0);
                 }
             }
         }

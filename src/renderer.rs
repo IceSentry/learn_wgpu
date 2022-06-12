@@ -10,7 +10,6 @@ use winit::window::Window;
 pub struct Pipeline {
     pub render_pipeline: wgpu::RenderPipeline,
     pub light_pipeline: wgpu::RenderPipeline,
-    pub camera_bind_group: wgpu::BindGroup,
 }
 
 pub struct Instance {
@@ -199,6 +198,8 @@ impl WgpuRenderer {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
+        } else {
+            log::warn!("size is too small")
         }
     }
 

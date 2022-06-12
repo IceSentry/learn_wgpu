@@ -106,10 +106,7 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
-pub fn create_camera_bind_group(
-    device: &wgpu::Device,
-    camera_buffer: &wgpu::Buffer,
-) -> wgpu::BindGroup {
+pub fn bind_group(device: &wgpu::Device, camera_buffer: &wgpu::Buffer) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("camera_bind_group"),
         layout: &bind_group_layout(device),

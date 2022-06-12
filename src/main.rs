@@ -10,7 +10,8 @@ use depth_pass::DepthPass;
 use light::Light;
 use model::Model;
 use render_phase::{
-    ClearColor, DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d,
+    CameraBindGroup, ClearColor, DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup,
+    RenderPhase3d,
 };
 use renderer::{Instance, Pipeline, WgpuRenderer};
 use texture::Texture;
@@ -35,10 +36,10 @@ const SPACE_BETWEEN: f32 = 3.0;
 const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
-const MODEL_NAME: &str = "teapot.obj";
-const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
-// const MODEL_NAME: &str = "bunny.obj";
-// const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
+// const MODEL_NAME: &str = "teapot.obj";
+// const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+const MODEL_NAME: &str = "bunny.obj";
+const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 
 // TODO figure out how to draw lines
 // TODO draw normals
@@ -53,18 +54,24 @@ fn main() {
 
     App::new()
         .insert_resource(WindowDescriptor {
-            width: 800.0,
-            height: 600.0,
+            // width: 800.0,
+            // height: 600.0,
             ..default()
         })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
         .add_plugin(InputPlugin::default())
-        .add_startup_system(setup.exclusive_system())
-        .add_startup_system_to_stage(StartupStage::PostStartup, spawn_instances)
-        .add_startup_system_to_stage(StartupStage::PostStartup, spawn_light)
-        .add_startup_system_to_stage(StartupStage::PostStartup, init_depth_pass)
+        .add_startup_system_to_stage(StartupStage::PreStartup, init_renderer)
+        .add_startup_system(setup)
+        .add_startup_system(init_depth_pass)
+        .add_startup_system(init_camera.before(setup))
+        .add_startup_system(spawn_instances)
+        .add_startup_system(spawn_light)
+        .add_startup_system_to_stage(
+            StartupStage::PostStartup,
+            init_render_phase.exclusive_system(),
+        )
         .add_system(render.exclusive_system())
         .add_system(resize)
         // .add_system(cursor_moved)
@@ -84,19 +91,22 @@ struct LightBuffer(wgpu::Buffer);
 struct Instances(Vec<Instance>);
 pub struct ShowDepthBuffer(bool);
 
-fn setup(world: &mut World) {
-    let window_id = {
-        let windows = world.resource::<Windows>();
-        windows.get_primary().expect("bevy window not found").id()
-    };
+fn init_renderer(
+    mut commands: Commands,
+    windows: Res<Windows>,
+    winit_windows: NonSendMut<WinitWindows>,
+) {
+    let window_id = windows.get_primary().expect("bevy window not found").id();
 
-    let winit_windows = world.non_send_resource_mut::<WinitWindows>();
     let winit_window = winit_windows
         .get_window(window_id)
         .expect("winit window not found");
 
     let renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
+    commands.insert_resource(renderer);
+}
 
+fn init_camera(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     let width = renderer.config.width as f32;
     let height = renderer.config.height as f32;
     let camera = Camera {
@@ -120,8 +130,16 @@ fn setup(world: &mut World) {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-    let camera_bind_group = camera::create_camera_bind_group(&renderer.device, &camera_buffer);
+    let camera_bind_group = camera::bind_group(&renderer.device, &camera_buffer);
 
+    commands.insert_resource(camera);
+    commands.insert_resource(CameraController::new(0.05));
+    commands.insert_resource(camera_uniform);
+    commands.insert_resource(CameraBuffer(camera_buffer));
+    commands.insert_resource(CameraBindGroup(camera_bind_group));
+}
+
+fn setup(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     let render_pipeline_layout =
         renderer
             .device
@@ -184,21 +202,17 @@ fn setup(world: &mut World) {
 
     let pipeline = Pipeline {
         render_pipeline,
-        camera_bind_group,
         light_pipeline: light_render_pipeline,
     };
 
-    let render_phase_3d = RenderPhase3d::from_world(world);
+    commands.insert_resource(pipeline);
+    commands.insert_resource(ShowDepthBuffer(false));
+    commands.insert_resource(ClearColor(Color::rgba(0.1, 0.2, 0.3, 1.0)));
+}
 
-    world.insert_resource(renderer);
-    world.insert_resource(pipeline);
-    world.insert_resource(camera);
-    world.insert_resource(CameraController::new(0.05));
-    world.insert_resource(camera_uniform);
-    world.insert_resource(CameraBuffer(camera_buffer));
-    world.insert_resource(ShowDepthBuffer(false));
+fn init_render_phase(world: &mut World) {
+    let render_phase_3d = RenderPhase3d::from_world(world);
     world.insert_resource(render_phase_3d);
-    world.insert_resource(ClearColor(Color::rgba(0.1, 0.2, 0.3, 1.0)));
 }
 
 fn init_depth_pass(mut commands: Commands, renderer: Res<WgpuRenderer>) {
