@@ -2,11 +2,14 @@ use bevy::{
     input::InputPlugin,
     math::{const_vec3, vec3},
     prelude::*,
+    tasks::{AsyncComputeTaskPool, Task},
+    utils::Instant,
     window::{WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
 use camera::{Camera, CameraController, CameraUniform};
 use depth_pass::DepthPass;
+use futures_lite::future;
 use light::Light;
 use model::Model;
 use render_phase::{
@@ -14,6 +17,7 @@ use render_phase::{
     RenderPhase3d,
 };
 use renderer::{Instance, Pipeline, WgpuRenderer};
+use resources::load_obj;
 use texture::Texture;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
@@ -66,13 +70,14 @@ fn main() {
         .add_startup_system(setup)
         .add_startup_system(init_depth_pass)
         .add_startup_system(init_camera.before(setup))
-        .add_startup_system(spawn_instances)
+        .add_startup_system(load_model)
         .add_startup_system(spawn_light)
         .add_startup_system_to_stage(
             StartupStage::PostStartup,
             init_render_phase.exclusive_system(),
         )
         .add_system(render.exclusive_system())
+        .add_system(handle_model_loaded)
         .add_system(resize)
         // .add_system(cursor_moved)
         .add_system(update_window_title)
@@ -81,7 +86,6 @@ fn main() {
         .add_system(update_show_depth)
         .add_system(update_light)
         .add_system(update_camera_buffer)
-        .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
 
@@ -241,53 +245,89 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     commands.insert_resource(LightBindGroup(light_bind_group));
 }
 
-fn spawn_instances(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    // TODO consider using bevy assets to load stuff
-    let obj_model = futures::executor::block_on(resources::load_model(
-        MODEL_NAME,
-        &renderer.device,
-        &renderer.queue,
-        &texture::bind_group_layout(&renderer.device),
-    ))
-    .expect("failed to load obj");
+#[allow(clippy::type_complexity)]
+#[derive(Component)]
+struct LoadModelTask(
+    Task<(
+        Vec<tobj::Model>,
+        Result<Vec<tobj::Material>, tobj::LoadError>,
+    )>,
+);
 
-    let mut instances: Vec<_> = Vec::new();
-    for z in 0..NUM_INSTANCES_PER_ROW {
-        for x in 0..NUM_INSTANCES_PER_ROW {
-            // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-            // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+fn load_model(mut commands: Commands) {
+    let thread_pool = AsyncComputeTaskPool::get();
+    let task = thread_pool.spawn(async move {
+        let start = Instant::now();
+        let obj = load_obj(MODEL_NAME).await.expect("Failed to load obj");
+        log::info!(
+            "Loading obj took {}ms",
+            (Instant::now() - start).as_millis()
+        );
+        obj
+    });
+    commands.spawn().insert(LoadModelTask(task));
+}
 
-            let translation = vec3(x as f32, 0.0, z as f32);
-            let rotation = if translation == Vec3::ZERO {
-                Quat::from_axis_angle(Vec3::Y, 0.0)
-            } else {
-                Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
-            };
+fn handle_model_loaded(
+    mut commands: Commands,
+    mut load_model_tasks: Query<(Entity, &mut LoadModelTask)>,
+    renderer: Res<WgpuRenderer>,
+) {
+    for (entity, mut task) in load_model_tasks.iter_mut() {
+        if let Some(obj) = future::block_on(future::poll_once(&mut task.0)) {
+            let model = resources::load_model(
+                MODEL_NAME,
+                obj,
+                &renderer.device,
+                &renderer.queue,
+                &texture::bind_group_layout(&renderer.device),
+            )
+            .expect("failed to load model from obj");
 
-            instances.push(Instance {
-                rotation,
-                translation,
-                scale: SCALE,
-            });
+            let mut instances: Vec<_> = Vec::new();
+            for z in 0..NUM_INSTANCES_PER_ROW {
+                for x in 0..NUM_INSTANCES_PER_ROW {
+                    // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                    // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+
+                    let translation = vec3(x as f32, 0.0, z as f32);
+                    let rotation = if translation == Vec3::ZERO {
+                        Quat::from_axis_angle(Vec3::Y, 0.0)
+                    } else {
+                        Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
+                    };
+
+                    instances.push(Instance {
+                        rotation,
+                        translation,
+                        scale: SCALE,
+                    });
+                }
+            }
+
+            let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
+
+            let instance_buffer =
+                renderer
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Instance Buffer"),
+                        contents: bytemuck::cast_slice(&instance_data),
+                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    });
+
+            commands
+                .entity(entity)
+                .insert(model)
+                .insert(InstanceCount(instances.len()))
+                .insert(InstanceBuffer(instance_buffer));
+
+            // clean up task
+            commands.entity(entity).remove::<LoadModelTask>();
+
+            commands.insert_resource(Instances(instances));
         }
     }
-
-    let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
-
-    let instance_buffer = renderer
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
-    commands
-        .spawn()
-        .insert(obj_model)
-        .insert(InstanceCount(instances.len()))
-        .insert(InstanceBuffer(instance_buffer));
-    commands.insert_resource(Instances(instances));
 }
 
 pub fn render(world: &mut World) {
@@ -398,11 +438,16 @@ fn update_light(
 
 fn move_instances(
     renderer: Res<WgpuRenderer>,
-    mut instances: ResMut<Instances>,
+    instances: Option<ResMut<Instances>>,
     time: Res<Time>,
     mut wave: Local<Wave>,
     instance_buffer: Query<&InstanceBuffer>,
 ) {
+    let mut instances = match instances {
+        Some(val) => val,
+        None => return,
+    };
+
     wave.offset += time.delta_seconds() * wave.frequency;
 
     for instance in instances.0.iter_mut() {

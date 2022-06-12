@@ -35,17 +35,17 @@ pub fn load_texture(
     Texture::from_bytes(device, queue, &data, file_name)
 }
 
-pub async fn load_model(
+pub async fn load_obj(
     file_name: &str,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    layout: &wgpu::BindGroupLayout,
-) -> anyhow::Result<Model> {
+) -> anyhow::Result<(
+    Vec<tobj::Model>,
+    Result<Vec<tobj::Material>, tobj::LoadError>,
+)> {
     let obj_data = load_string(file_name)?;
     let obj_cursor = Cursor::new(obj_data);
     let mut obj_reader = BufReader::new(obj_cursor);
 
-    let (models, obj_materials) = tobj::load_obj_buf_async(
+    Ok(tobj::load_obj_buf_async(
         &mut obj_reader,
         &tobj::LoadOptions {
             triangulate: true,
@@ -58,7 +58,37 @@ pub async fn load_model(
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },
     )
-    .await?;
+    .await?)
+}
+
+pub fn load_model(
+    name: &str,
+    (models, obj_materials): (
+        Vec<tobj::Model>,
+        Result<Vec<tobj::Material>, tobj::LoadError>,
+    ),
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+) -> anyhow::Result<Model> {
+    // let obj_data = load_string(file_name)?;
+    // let obj_cursor = Cursor::new(obj_data);
+    // let mut obj_reader = BufReader::new(obj_cursor);
+
+    // let (models, obj_materials) = tobj::load_obj_buf_async(
+    //     &mut obj_reader,
+    //     &tobj::LoadOptions {
+    //         triangulate: true,
+    //         single_index: true,
+    //         ..Default::default()
+    //     },
+    //     |p| async move {
+    //         // FIXME this assumes everything is at the root of res/
+    //         let mat_text = load_string(&p).unwrap();
+    //         tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
+    //     },
+    // )
+    // .await?;
 
     let mut materials = Vec::new();
     for m in obj_materials? {
@@ -117,7 +147,7 @@ pub async fn load_model(
             }
 
             ModelMesh {
-                name: file_name.to_string(),
+                name: name.to_string(),
                 vertex_buffer: mesh.get_vertex_buffer(device),
                 index_buffer: mesh.get_index_buffer(device),
                 num_elements: mesh.indices.unwrap().len() as u32,
