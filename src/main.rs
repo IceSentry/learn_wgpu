@@ -378,8 +378,9 @@ fn cursor_moved(
 }
 
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
-    let window = windows.get_primary_mut().unwrap();
-    window.set_title(format!("dt: {}ms", time.delta().as_millis()));
+    if let Some(window) = windows.get_primary_mut() {
+        window.set_title(format!("dt: {}ms", time.delta().as_millis()));
+    }
 }
 
 fn update_show_depth(keyboard_input: Res<Input<KeyCode>>, mut draw_depth: ResMut<ShowDepthBuffer>) {
