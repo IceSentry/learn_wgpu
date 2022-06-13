@@ -71,25 +71,6 @@ pub fn load_model(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> anyhow::Result<Model> {
-    // let obj_data = load_string(file_name)?;
-    // let obj_cursor = Cursor::new(obj_data);
-    // let mut obj_reader = BufReader::new(obj_cursor);
-
-    // let (models, obj_materials) = tobj::load_obj_buf_async(
-    //     &mut obj_reader,
-    //     &tobj::LoadOptions {
-    //         triangulate: true,
-    //         single_index: true,
-    //         ..Default::default()
-    //     },
-    //     |p| async move {
-    //         // FIXME this assumes everything is at the root of res/
-    //         let mat_text = load_string(&p).unwrap();
-    //         tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
-    //     },
-    // )
-    // .await?;
-
     let mut materials = Vec::new();
     for m in obj_materials? {
         let diffuse_texture = load_texture(&m.diffuse_texture, device, queue)?;

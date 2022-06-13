@@ -273,59 +273,62 @@ fn handle_model_loaded(
     renderer: Res<WgpuRenderer>,
 ) {
     for (entity, mut task) in load_model_tasks.iter_mut() {
-        if let Some(obj) = future::block_on(future::poll_once(&mut task.0)) {
-            let model = resources::load_model(
-                MODEL_NAME,
-                obj,
-                &renderer.device,
-                &renderer.queue,
-                &texture::bind_group_layout(&renderer.device),
-            )
-            .expect("failed to load model from obj");
+        let obj = match future::block_on(future::poll_once(&mut task.0)) {
+            Some(val) => val,
+            None => continue,
+        };
 
-            let mut instances: Vec<_> = Vec::new();
-            for z in 0..NUM_INSTANCES_PER_ROW {
-                for x in 0..NUM_INSTANCES_PER_ROW {
-                    // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                    // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+        let model = resources::load_model(
+            MODEL_NAME,
+            obj,
+            &renderer.device,
+            &renderer.queue,
+            &texture::bind_group_layout(&renderer.device),
+        )
+        .expect("failed to load model from obj");
 
-                    let translation = vec3(x as f32, 0.0, z as f32);
-                    let rotation = if translation == Vec3::ZERO {
-                        Quat::from_axis_angle(Vec3::Y, 0.0)
-                    } else {
-                        Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
-                    };
+        let mut instances: Vec<_> = Vec::new();
+        for z in 0..NUM_INSTANCES_PER_ROW {
+            for x in 0..NUM_INSTANCES_PER_ROW {
+                // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
 
-                    instances.push(Instance {
-                        rotation,
-                        translation,
-                        scale: SCALE,
-                    });
-                }
+                let translation = vec3(x as f32, 0.0, z as f32);
+                let rotation = if translation == Vec3::ZERO {
+                    Quat::from_axis_angle(Vec3::Y, 0.0)
+                } else {
+                    Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
+                };
+
+                instances.push(Instance {
+                    rotation,
+                    translation,
+                    scale: SCALE,
+                });
             }
-
-            let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
-
-            let instance_buffer =
-                renderer
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Instance Buffer"),
-                        contents: bytemuck::cast_slice(&instance_data),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    });
-
-            commands
-                .entity(entity)
-                .insert(model)
-                .insert(InstanceCount(instances.len()))
-                .insert(InstanceBuffer(instance_buffer));
-
-            // clean up task
-            commands.entity(entity).remove::<LoadModelTask>();
-
-            commands.insert_resource(Instances(instances));
         }
+
+        let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
+
+        let instance_buffer =
+            renderer
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Instance Buffer"),
+                    contents: bytemuck::cast_slice(&instance_data),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                });
+
+        commands
+            .entity(entity)
+            .insert(model)
+            .insert(InstanceCount(instances.len()))
+            .insert(InstanceBuffer(instance_buffer));
+
+        // clean up task
+        commands.entity(entity).remove::<LoadModelTask>();
+
+        commands.insert_resource(Instances(instances));
     }
 }
 
