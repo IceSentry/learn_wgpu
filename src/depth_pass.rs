@@ -94,7 +94,7 @@ impl DepthPass {
             "Depth Pass Render Pipeline",
             wgpu::ShaderModuleDescriptor {
                 label: Some("Depth Pass Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("depth.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/depth.wgsl").into()),
             },
             &pipeline_layout,
             &[Vertex::layout()],

@@ -87,9 +87,9 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let specular_strength = pow(max(dot(in.world_normal, half_dir), 0.0), 32.0);
     let specular_color = specular_strength * light.color;
 
-    // let result = (ambient_color + diffuse_color + specular_color) * color.rgb;
+    let result = (ambient_color + diffuse_color + specular_color) * color.rgb;
     // let result = specular_color;
-    let result = specular_color * in.world_normal;
+    // let result = specular_color * in.world_normal;
     // let result = in.world_normal;
 
     return vec4<f32>(result, color.a);

@@ -54,6 +54,7 @@ pub async fn load_obj(
         },
         |p| async move {
             // FIXME this assumes everything is at the root of res/
+            log::info!("Loading {p}");
             let mat_text = load_string(&p).unwrap();
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },

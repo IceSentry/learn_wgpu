@@ -40,13 +40,15 @@ const SPACE_BETWEEN: f32 = 3.0;
 const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
-// const MODEL_NAME: &str = "teapot.obj";
-// const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
-const MODEL_NAME: &str = "bunny.obj";
-const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
+const MODEL_NAME: &str = "teapot/teapot.obj";
+const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+// const MODEL_NAME: &str = "sponza/sponza.obj";
+// const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out how to draw lines
 // TODO better camera
+// TODO extract to plugin
+// TODO create buffers and bind groups when needed every frane
 
 fn main() {
     env_logger::builder()
@@ -160,7 +162,7 @@ fn setup(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         "Render Pipeline",
         wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
         },
         &render_pipeline_layout,
         &[model::ModelVertex::layout(), InstanceRaw::layout()],
@@ -186,7 +188,7 @@ fn setup(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             });
         let shader = wgpu::ShaderModuleDescriptor {
             label: Some("Light Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/light.wgsl").into()),
         };
         renderer.create_render_pipeline(
             "Light Render Pipeline",
