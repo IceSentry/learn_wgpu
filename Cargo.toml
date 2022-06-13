@@ -9,14 +9,7 @@ build = "src/build.rs"
 wgpu = "0.12"
 env_logger = "0.9"
 winit = "0.26.1"
-futures = "0.3"
-# bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
-#     "bevy_winit",
-# ] }
-# bevy = { version = "0.7", default-features = false, features = ["bevy_winit"] }
-# bevy = { path = "../bevy" }
 bevy = { git = "https://github.com/bevyengine/bevy" }
-# bevy = "0.7"
 log = "0.4"
 bytemuck = { version = "1.7", features = ["derive"] }
 image = "0.24"
@@ -28,6 +21,3 @@ futures-lite = "1.12.0"
 anyhow = "1.0"
 fs_extra = "1.2"
 glob = "0.3"
-
-# [patch.crates-io]
-# ahash = "0.7.6"

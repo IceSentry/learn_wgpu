@@ -46,7 +46,6 @@ const MODEL_NAME: &str = "bunny.obj";
 const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 
 // TODO figure out how to draw lines
-// TODO draw normals
 // TODO better camera
 
 fn main() {
@@ -106,7 +105,7 @@ fn init_renderer(
         .get_window(window_id)
         .expect("winit window not found");
 
-    let renderer = futures::executor::block_on(WgpuRenderer::new(winit_window));
+    let renderer = future::block_on(WgpuRenderer::new(winit_window));
     commands.insert_resource(renderer);
 }
 
