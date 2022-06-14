@@ -48,11 +48,8 @@ pub fn load_model(
     let mut materials = Vec::new();
     log::info!("creating Textures from obj materials");
     for m in obj_materials {
-        if m.diffuse_texture_data.is_empty() {
-            panic!("diffuse_texture is empty");
-        }
-
-        let diffuse_texture = Texture::from_bytes(device, queue, &m.diffuse_texture_data, &m.name)?;
+        let diffuse_texture =
+            Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name))?;
         let bind_group = texture::bind_group(device, layout, &diffuse_texture);
         materials.push(Material {
             name: m.name.clone(),

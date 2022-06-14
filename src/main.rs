@@ -43,8 +43,11 @@ const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
-const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 const MODEL_NAME: &str = "sponza_obj/sponza.obj";
+const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+// const MODEL_NAME: &str = "bunny.obj";
+// const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
+// const MODEL_NAME: &str = "cube/cube.obj";
 // const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out how to draw lines
@@ -260,9 +263,10 @@ fn handle_obj_loaded(
     obj_assets: ResMut<Assets<LoadedObj>>,
     asset_server: Res<AssetServer>,
     renderer: Res<WgpuRenderer>,
+    mut mesh_spawned: Local<bool>,
 ) {
     let loaded_obj = obj_assets.get(&asset_server.get_handle(MODEL_NAME));
-    if loaded_obj.is_none() {
+    if *mesh_spawned || loaded_obj.is_none() {
         return;
     }
 
@@ -317,6 +321,8 @@ fn handle_obj_loaded(
         .insert(InstanceBuffer(instance_buffer));
 
     commands.insert_resource(Instances(instances));
+
+    *mesh_spawned = true;
 }
 
 pub fn render(world: &mut World) {

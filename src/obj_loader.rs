@@ -1,9 +1,10 @@
 use bevy::{
-    asset::{AssetLoader, LoadedAsset},
+    asset::{AssetLoader, LoadContext, LoadedAsset},
     prelude::*,
     reflect::TypeUuid,
     utils::Instant,
 };
+use image::{DynamicImage, RgbaImage};
 use std::{
     io::{BufReader, Cursor},
     path::Path,
@@ -24,7 +25,7 @@ pub struct ObjLoader;
 #[derive(Debug)]
 pub struct ObjMaterial {
     pub name: String,
-    pub diffuse_texture_data: Vec<u8>,
+    pub diffuse_texture_data: RgbaImage,
 }
 
 #[derive(Debug, TypeUuid)]
@@ -76,21 +77,19 @@ impl AssetLoader for ObjLoader {
 
             let mut materials = Vec::new();
             for mat in obj_materials.expect("Failed to load materials") {
-                log::info!("loading {} {}", mat.name, mat.diffuse_texture);
-                if mat.diffuse_texture.is_empty() {
-                    // TODO only load handles
-                    // let path = AssetPath::new_ref(load_context.path(), Some(&label));
-                    // load_context.get_handle(id)
-                    // load_context.set_labeled_asset(LoadedAsset::new(material));
-                    let data = load_context
-                        .asset_io()
-                        .load_path(Path::new("pink.png"))
-                        .await
-                        .unwrap_or_else(|_| panic!("Failed to load {path:?}"));
+                let start = Instant::now();
+                log::info!("Loading {} {}", mat.name, mat.diffuse_texture);
 
+                // TODO consider only loading handles
+                // let path = AssetPath::new_ref(load_context.path(), Some(&label));
+                // load_context.get_handle(id)
+                // load_context.set_labeled_asset(LoadedAsset::new(material));
+
+                if mat.diffuse_texture.is_empty() {
+                    let tex = load_texture_data(load_context, Path::new("pink.png")).await?;
                     materials.push(ObjMaterial {
                         name: mat.name,
-                        diffuse_texture_data: data,
+                        diffuse_texture_data: tex,
                     });
                     continue;
                 }
@@ -98,31 +97,49 @@ impl AssetLoader for ObjLoader {
                 let mut path = path.parent().expect("no parent").to_path_buf();
                 path.push(mat.diffuse_texture.clone());
 
-                let data = asset_io
-                    .load_path(&path)
-                    .await
-                    .unwrap_or_else(|_| panic!("Failed to load {path:?}"));
-
-                log::info!("finished loading {} {}", mat.name, mat.diffuse_texture);
-
+                let tex = load_texture_data(load_context, &path).await?;
                 materials.push(ObjMaterial {
-                    name: mat.name,
-                    diffuse_texture_data: data,
+                    name: mat.name.clone(),
+                    diffuse_texture_data: tex,
                 });
+
+                log::info!(
+                    "Finished loading {} {} {}ms",
+                    mat.name,
+                    mat.diffuse_texture,
+                    (Instant::now() - start).as_millis()
+                );
             }
 
             let obj = LoadedObj {
                 models: obj_models,
                 materials,
             };
+
+            // This is only used for the log
+            let path = path.to_path_buf();
+
+            load_context.set_default_asset(LoadedAsset::new(obj));
+
             log::info!(
                 "Loading {:?} took {}ms",
-                path.to_path_buf(),
+                path,
                 (Instant::now() - start).as_millis(),
             );
-            load_context.set_default_asset(LoadedAsset::new(obj));
 
             Ok(())
         })
     }
+}
+
+async fn load_texture_data<'a>(
+    load_context: &'a LoadContext<'a>,
+    path: &Path,
+) -> anyhow::Result<RgbaImage> {
+    let data = load_context
+        .asset_io()
+        .load_path(path)
+        .await
+        .unwrap_or_else(|_| panic!("Failed to load {path:?}"));
+    Ok(image::load_from_memory(&data)?.to_rgba8())
 }

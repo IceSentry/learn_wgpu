@@ -1,3 +1,5 @@
+use bevy::utils::Instant;
+
 #[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,
@@ -14,20 +16,29 @@ impl Texture {
         bytes: &[u8],
         label: &str,
     ) -> anyhow::Result<Self> {
+        let start = Instant::now();
+        log::info!("start image::load_from_memory {label}");
+
         let img = image::load_from_memory(bytes)?;
-        Self::from_image(device, queue, &img, Some(label))
+
+        log::info!(
+            "end image::load_from_memory {label} {}ms",
+            (Instant::now() - start).as_millis()
+        );
+
+        Self::from_image(device, queue, &img.to_rgba8(), Some(label))
     }
 
     pub fn from_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        img: &image::DynamicImage,
+        rgba: &image::RgbaImage,
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
-        let rgba = img.to_rgba8();
+        let start = Instant::now();
+        log::info!("start texture::from_image {label:?}");
 
-        use image::GenericImageView;
-        let (texture_width, texture_height) = img.dimensions();
+        let (texture_width, texture_height) = rgba.dimensions();
 
         let size = wgpu::Extent3d {
             width: texture_width,
@@ -51,7 +62,7 @@ impl Texture {
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
-            &rgba,
+            rgba,
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: std::num::NonZeroU32::new(4 * texture_width),
@@ -65,6 +76,11 @@ impl Texture {
             mag_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
+
+        log::info!(
+            "end texture::from_image {label:?} {}ms",
+            (Instant::now() - start).as_millis()
+        );
 
         Ok(Self {
             texture,
