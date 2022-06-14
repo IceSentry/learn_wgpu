@@ -34,6 +34,7 @@ pub fn load_texture(
     .with_context(|| "Failed to create Texture from bytes".to_string())
 }
 
+// TODO consider loading materials in a separate frame to avoid blocking for too long
 pub fn load_model(
     name: &str,
     root_path: &Path,
@@ -45,8 +46,9 @@ pub fn load_model(
 ) -> anyhow::Result<Model> {
     let start = Instant::now();
 
+    log::info!("Creating gpu textures from obj materials");
+
     let mut materials = Vec::new();
-    log::info!("creating Textures from obj materials");
     for m in obj_materials {
         let diffuse_texture =
             Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name))?;
@@ -70,12 +72,15 @@ pub fn load_model(
             bind_group,
         });
     }
+
     log::info!(
-        "creating Textures from obj materials took {}ms",
+        "Finished creating gpu textures from obj materials {}ms",
         (Instant::now() - start).as_millis()
     );
 
+    let start = Instant::now();
     log::info!("Creating Mesh buffers");
+
     let meshes: Vec<_> = obj_models
         .iter()
         .map(|m| {
@@ -121,7 +126,11 @@ pub fn load_model(
             }
         })
         .collect();
-    log::info!("Meshes loaded");
+
+    log::info!(
+        "Finished creating mesh buffers {}ms",
+        (Instant::now() - start).as_millis()
+    );
 
     Ok(Model { meshes, materials })
 }

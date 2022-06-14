@@ -35,9 +35,6 @@ impl Texture {
         rgba: &image::RgbaImage,
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
-        let start = Instant::now();
-        log::info!("start texture::from_image {label:?}");
-
         let (texture_width, texture_height) = rgba.dimensions();
 
         let size = wgpu::Extent3d {
@@ -76,11 +73,6 @@ impl Texture {
             mag_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-
-        log::info!(
-            "end texture::from_image {label:?} {}ms",
-            (Instant::now() - start).as_millis()
-        );
 
         Ok(Self {
             texture,
