@@ -41,11 +41,11 @@ const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
 const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
+// const MODEL_NAME: &str = "large_obj/bistro/Exterior/exterior.obj";
 const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 // const MODEL_NAME: &str = "bunny.obj";
 // const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 // const MODEL_NAME: &str = "cube/cube.obj";
-// const MODEL_NAME: &str = "large_obj/dabrovic_sponza/sponza.obj";
 // const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out how to draw lines

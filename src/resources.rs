@@ -92,9 +92,10 @@ pub fn load_model(
                         m.mesh.positions[i * 3 + 2],
                     ),
                     uv: if m.mesh.texcoords.is_empty() {
-                        Vec2::new(1.0, 1.0)
+                        Vec2::new(0.0, 0.0)
                     } else {
-                        Vec2::new(m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1])
+                        // For some reasons the UVs are flipped
+                        Vec2::new(m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1])
                     },
                     normal: if m.mesh.normals.is_empty() {
                         Vec3::new(0.0, 0.0, 0.0)
