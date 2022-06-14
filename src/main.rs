@@ -7,15 +7,14 @@ use bevy::{
     window::{WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
-use camera::{Camera, CameraController, CameraUniform};
+use camera::{Camera, CameraUniform};
 use depth_pass::DepthPass;
 use futures_lite::future;
 use light::Light;
 use model::Model;
 use obj_loader::{LoadedObj, ObjLoaderPlugin};
 use render_phase::{
-    CameraBindGroup, ClearColor, DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup,
-    RenderPhase3d,
+    ClearColor, DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d,
 };
 use renderer::{Instance, Pipeline, WgpuRenderer};
 use std::path::Path;
@@ -39,7 +38,6 @@ const NUM_INSTANCES_PER_ROW: u32 = 1;
 #[allow(unused)]
 const SPACE_BETWEEN: f32 = 3.0;
 const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
-const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
 const MODEL_NAME: &str = "sponza_obj/sponza.obj";
@@ -53,7 +51,6 @@ const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 // TODO better camera
 // TODO extract to plugin
 // TODO create buffers and bind groups when needed every frane
-// TODO make obj loading a custom asset loader
 
 fn main() {
     env_logger::builder()
@@ -74,10 +71,10 @@ fn main() {
         .add_plugin(InputPlugin::default())
         .add_plugin(AssetPlugin)
         .add_plugin(ObjLoaderPlugin)
+        .add_plugin(camera::CameraPlugin)
         .add_startup_system_to_stage(StartupStage::PreStartup, init_renderer)
         .add_startup_system(setup)
         .add_startup_system(init_depth_pass)
-        .add_startup_system(init_camera.before(setup))
         .add_startup_system(spawn_light)
         .add_startup_system(load_obj_asset)
         .add_startup_system_to_stage(
@@ -87,17 +84,14 @@ fn main() {
         .add_system(render.exclusive_system())
         .add_system(resize)
         .add_system(update_window_title)
-        .add_system(update_camera)
         .add_system(update_show_depth)
         .add_system(update_light)
-        .add_system(update_camera_buffer)
         .add_system(handle_obj_loaded)
         // .add_system(cursor_moved)
         // .add_system(move_instances)
         .run();
 }
 
-struct CameraBuffer(wgpu::Buffer);
 #[derive(Component)]
 struct LightBuffer(wgpu::Buffer);
 struct Instances(Vec<Instance>);
@@ -116,39 +110,6 @@ fn init_renderer(
 
     let renderer = future::block_on(WgpuRenderer::new(winit_window));
     commands.insert_resource(renderer);
-}
-
-fn init_camera(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    let width = renderer.config.width as f32;
-    let height = renderer.config.height as f32;
-    let camera = Camera {
-        eye: CAMERRA_EYE,
-        target: vec3(0.0, 0.0, 0.0),
-        up: Vec3::Y,
-        aspect: width / height,
-        fov_y: 45.0,
-        z_near: 0.1,
-        z_far: 100.0,
-    };
-
-    let mut camera_uniform = CameraUniform::new();
-    camera_uniform.update_view_proj(&camera);
-
-    let camera_buffer = renderer
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[camera_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-    let camera_bind_group = camera::bind_group(&renderer.device, &camera_buffer);
-
-    commands.insert_resource(camera);
-    commands.insert_resource(CameraController::new(0.05));
-    commands.insert_resource(camera_uniform);
-    commands.insert_resource(CameraBuffer(camera_buffer));
-    commands.insert_resource(CameraBindGroup(camera_bind_group));
 }
 
 fn setup(mut commands: Commands, renderer: Res<WgpuRenderer>) {
@@ -366,36 +327,6 @@ fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
 fn update_show_depth(keyboard_input: Res<Input<KeyCode>>, mut draw_depth: ResMut<ShowDepthBuffer>) {
     if keyboard_input.just_pressed(KeyCode::X) {
         draw_depth.0 = !draw_depth.0;
-    }
-}
-
-fn update_camera(
-    mut camera_controller: ResMut<CameraController>,
-    keyboard_input: Res<Input<KeyCode>>,
-    mut camera: ResMut<Camera>,
-    mut camera_uniform: ResMut<CameraUniform>,
-) {
-    camera_controller.is_forward_pressed = keyboard_input.pressed(KeyCode::W);
-    camera_controller.is_left_pressed = keyboard_input.pressed(KeyCode::A);
-    camera_controller.is_backward_pressed = keyboard_input.pressed(KeyCode::S);
-    camera_controller.is_right_pressed = keyboard_input.pressed(KeyCode::D);
-
-    camera_controller.update_camera(&mut camera);
-
-    camera_uniform.update_view_proj(&camera);
-}
-
-fn update_camera_buffer(
-    renderer: Res<WgpuRenderer>,
-    camera_buffer: Res<CameraBuffer>,
-    camera_uniform: Res<CameraUniform>,
-) {
-    if camera_uniform.is_changed() {
-        renderer.queue.write_buffer(
-            &camera_buffer.0,
-            0,
-            bytemuck::cast_slice(&[*camera_uniform]),
-        );
     }
 }
 
