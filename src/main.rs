@@ -1,5 +1,4 @@
-use std::path::Path;
-
+use crate::{model::ModelVertex, renderer::InstanceRaw};
 use bevy::{
     asset::AssetPlugin,
     input::InputPlugin,
@@ -19,11 +18,10 @@ use render_phase::{
     RenderPhase3d,
 };
 use renderer::{Instance, Pipeline, WgpuRenderer};
+use std::path::Path;
 use texture::Texture;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
-
-use crate::{model::ModelVertex, renderer::InstanceRaw};
 
 mod camera;
 mod depth_pass;
