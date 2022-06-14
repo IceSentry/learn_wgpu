@@ -103,19 +103,26 @@ async fn load_obj<'a, 'b>(
 
     let mut tasks = Vec::new();
     let pool = IoTaskPool::get();
-    let path = load_context.path().to_path_buf();
+    let parent_path = load_context
+        .path()
+        .parent()
+        .expect("No parent found for load_context path")
+        .to_path_buf();
 
     for obj_material in obj_materials.clone().expect("Failed to load materials") {
-        let path = path.clone();
+        let parent_path = parent_path.clone();
         let task = pool.spawn(async move {
-            let mut texture_path = path.parent().expect("no parent").to_path_buf();
-            if obj_material.diffuse_texture.is_empty() {
+            let texture_path = if obj_material.diffuse_texture.is_empty() {
                 // default texture
-                texture_path.push("pink.png");
+                Path::new("pink.png").to_path_buf()
             } else {
+                let mut texture_path = parent_path.clone();
                 texture_path.push(obj_material.diffuse_texture.clone());
-            }
-            let texture = load_texture(texture_path.clone()).expect("failed to load texture");
+                texture_path
+            };
+            let texture = load_texture(texture_path.clone())
+                .with_context(|| format!("Failed to load texture {texture_path:?}"))
+                .unwrap();
             log::info!("Finished loading {texture_path:?}");
             (obj_material, texture)
         });
