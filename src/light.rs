@@ -65,6 +65,7 @@ impl Light {
     }
 }
 
+#[allow(unused)]
 fn draw_light_mesh<'a>(
     render_pass: &mut wgpu::RenderPass<'a>,
     mesh: &'a ModelMesh,

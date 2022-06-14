@@ -4,7 +4,7 @@ use bevy::{
     reflect::TypeUuid,
     utils::Instant,
 };
-use image::{DynamicImage, RgbaImage};
+use image::RgbaImage;
 use std::{
     io::{BufReader, Cursor},
     path::Path,

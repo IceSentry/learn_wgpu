@@ -38,6 +38,7 @@ mod shapes;
 mod texture;
 
 const NUM_INSTANCES_PER_ROW: u32 = 1;
+#[allow(unused)]
 const SPACE_BETWEEN: f32 = 3.0;
 const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
@@ -87,14 +88,14 @@ fn main() {
         )
         .add_system(render.exclusive_system())
         .add_system(resize)
-        // .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
-        // .add_system(move_instances)
         .add_system(update_show_depth)
         .add_system(update_light)
         .add_system(update_camera_buffer)
         .add_system(handle_obj_loaded)
+        // .add_system(cursor_moved)
+        // .add_system(move_instances)
         .run();
 }
 
@@ -358,20 +359,6 @@ fn resize(
     }
 }
 
-fn cursor_moved(
-    renderer: Res<WgpuRenderer>,
-    mut events: EventReader<CursorMoved>,
-    mut clear_color: ResMut<ClearColor>,
-) {
-    for event in events.iter() {
-        clear_color.0 = Color::rgb(
-            event.position.x as f32 / renderer.size.width as f32,
-            event.position.y as f32 / renderer.size.height as f32,
-            clear_color.0.b(),
-        );
-    }
-}
-
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
     if let Some(window) = windows.get_primary_mut() {
         window.set_title(format!("dt: {}ms", time.delta().as_millis()));
@@ -432,6 +419,22 @@ fn update_light(
     }
 }
 
+#[allow(unused)]
+fn cursor_moved(
+    renderer: Res<WgpuRenderer>,
+    mut events: EventReader<CursorMoved>,
+    mut clear_color: ResMut<ClearColor>,
+) {
+    for event in events.iter() {
+        clear_color.0 = Color::rgb(
+            event.position.x as f32 / renderer.size.width as f32,
+            event.position.y as f32 / renderer.size.height as f32,
+            clear_color.0.b(),
+        );
+    }
+}
+
+#[allow(unused)]
 fn move_instances(
     renderer: Res<WgpuRenderer>,
     instances: Option<ResMut<Instances>>,
