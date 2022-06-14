@@ -1,9 +1,10 @@
+use std::path::Path;
+
 use bevy::{
+    asset::AssetPlugin,
     input::InputPlugin,
     math::{const_vec3, vec3},
     prelude::*,
-    tasks::{AsyncComputeTaskPool, Task},
-    utils::Instant,
     window::{WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
@@ -12,12 +13,12 @@ use depth_pass::DepthPass;
 use futures_lite::future;
 use light::Light;
 use model::Model;
+use obj_loader::{LoadedObj, ObjLoaderPlugin};
 use render_phase::{
     CameraBindGroup, ClearColor, DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup,
     RenderPhase3d,
 };
 use renderer::{Instance, Pipeline, WgpuRenderer};
-use resources::load_obj;
 use texture::Texture;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
@@ -29,6 +30,7 @@ mod depth_pass;
 mod light;
 mod mesh;
 mod model;
+mod obj_loader;
 mod render_phase;
 mod renderer;
 mod resources;
@@ -40,15 +42,16 @@ const SPACE_BETWEEN: f32 = 3.0;
 const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
-const MODEL_NAME: &str = "teapot/teapot.obj";
+// const MODEL_NAME: &str = "teapot/teapot.obj";
 const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
-// const MODEL_NAME: &str = "sponza/sponza.obj";
+const MODEL_NAME: &str = "sponza_obj/sponza.obj";
 // const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out how to draw lines
 // TODO better camera
 // TODO extract to plugin
 // TODO create buffers and bind groups when needed every frane
+// TODO make obj loading a custom asset loader
 
 fn main() {
     env_logger::builder()
@@ -67,26 +70,28 @@ fn main() {
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
         .add_plugin(InputPlugin::default())
+        .add_plugin(AssetPlugin)
+        .add_plugin(ObjLoaderPlugin)
         .add_startup_system_to_stage(StartupStage::PreStartup, init_renderer)
         .add_startup_system(setup)
         .add_startup_system(init_depth_pass)
         .add_startup_system(init_camera.before(setup))
-        .add_startup_system(load_model)
         .add_startup_system(spawn_light)
+        .add_startup_system(load_obj_asset)
         .add_startup_system_to_stage(
             StartupStage::PostStartup,
             init_render_phase.exclusive_system(),
         )
         .add_system(render.exclusive_system())
-        .add_system(handle_model_loaded)
         .add_system(resize)
         // .add_system(cursor_moved)
         .add_system(update_window_title)
         .add_system(update_camera)
-        .add_system(move_instances)
+        // .add_system(move_instances)
         .add_system(update_show_depth)
         .add_system(update_light)
         .add_system(update_camera_buffer)
+        .add_system(handle_obj_loaded)
         .run();
 }
 
@@ -246,92 +251,72 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     commands.insert_resource(LightBindGroup(light_bind_group));
 }
 
-#[allow(clippy::type_complexity)]
-#[derive(Component)]
-struct LoadModelTask(
-    Task<(
-        Vec<tobj::Model>,
-        Result<Vec<tobj::Material>, tobj::LoadError>,
-    )>,
-);
-
-fn load_model(mut commands: Commands) {
-    let thread_pool = AsyncComputeTaskPool::get();
-    let task = thread_pool.spawn(async move {
-        let start = Instant::now();
-        let obj = load_obj(MODEL_NAME).await.expect("Failed to load obj");
-        log::info!(
-            "Loading obj took {}ms",
-            (Instant::now() - start).as_millis()
-        );
-        obj
-    });
-    commands.spawn().insert(LoadModelTask(task));
+fn load_obj_asset(asset_server: Res<AssetServer>) {
+    let _: Handle<LoadedObj> = asset_server.load(MODEL_NAME);
 }
 
-fn handle_model_loaded(
+fn handle_obj_loaded(
     mut commands: Commands,
-    mut load_model_tasks: Query<(Entity, &mut LoadModelTask)>,
+    obj_assets: ResMut<Assets<LoadedObj>>,
+    asset_server: Res<AssetServer>,
     renderer: Res<WgpuRenderer>,
 ) {
-    for (entity, mut task) in load_model_tasks.iter_mut() {
-        let obj = match future::block_on(future::poll_once(&mut task.0)) {
-            Some(val) => val,
-            None => continue,
-        };
-
-        let model = resources::load_model(
-            MODEL_NAME,
-            obj,
-            &renderer.device,
-            &renderer.queue,
-            &texture::bind_group_layout(&renderer.device),
-        )
-        .expect("failed to load model from obj");
-
-        let mut instances: Vec<_> = Vec::new();
-        for z in 0..NUM_INSTANCES_PER_ROW {
-            for x in 0..NUM_INSTANCES_PER_ROW {
-                // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-
-                let translation = vec3(x as f32, 0.0, z as f32);
-                let rotation = if translation == Vec3::ZERO {
-                    Quat::from_axis_angle(Vec3::Y, 0.0)
-                } else {
-                    Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
-                };
-
-                instances.push(Instance {
-                    rotation,
-                    translation,
-                    scale: SCALE,
-                });
-            }
-        }
-
-        let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
-
-        let instance_buffer =
-            renderer
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Instance Buffer"),
-                    contents: bytemuck::cast_slice(&instance_data),
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                });
-
-        commands
-            .entity(entity)
-            .insert(model)
-            .insert(InstanceCount(instances.len()))
-            .insert(InstanceBuffer(instance_buffer));
-
-        // clean up task
-        commands.entity(entity).remove::<LoadModelTask>();
-
-        commands.insert_resource(Instances(instances));
+    let loaded_obj = obj_assets.get(&asset_server.get_handle(MODEL_NAME));
+    if loaded_obj.is_none() {
+        return;
     }
+
+    let loaded_obj = loaded_obj.unwrap();
+
+    let model = resources::load_model(
+        MODEL_NAME,
+        Path::new(&MODEL_NAME),
+        &loaded_obj.models,
+        &loaded_obj.materials,
+        &renderer.device,
+        &renderer.queue,
+        &texture::bind_group_layout(&renderer.device),
+    )
+    .expect("failed to load model from obj");
+
+    let mut instances: Vec<_> = Vec::new();
+    for z in 0..NUM_INSTANCES_PER_ROW {
+        for x in 0..NUM_INSTANCES_PER_ROW {
+            // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+
+            let translation = vec3(x as f32, 0.0, z as f32);
+            let rotation = if translation == Vec3::ZERO {
+                Quat::from_axis_angle(Vec3::Y, 0.0)
+            } else {
+                Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
+            };
+
+            instances.push(Instance {
+                rotation,
+                translation,
+                scale: SCALE,
+            });
+        }
+    }
+
+    let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
+
+    let instance_buffer = renderer
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+    commands
+        .spawn()
+        .insert(model)
+        .insert(InstanceCount(instances.len()))
+        .insert(InstanceBuffer(instance_buffer));
+
+    commands.insert_resource(Instances(instances));
 }
 
 pub fn render(world: &mut World) {

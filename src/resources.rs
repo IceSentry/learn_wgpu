@@ -1,89 +1,71 @@
-use bevy::math::{Vec2, Vec3};
+use std::path::{Path, PathBuf};
 
-// TODO add support for wasm
 use crate::{
     mesh::{Mesh, Vertex},
     model::{Material, Model, ModelMesh},
+    obj_loader::ObjMaterial,
     texture::{self, Texture},
 };
-use std::io::{BufReader, Cursor};
+use anyhow::Context;
+use bevy::{
+    math::{Vec2, Vec3},
+    utils::Instant,
+};
 
-pub fn load_string(file_name: &str) -> anyhow::Result<String> {
-    let path = std::path::Path::new(env!("OUT_DIR"))
-        .join("res")
-        .join(file_name);
-    let txt = std::fs::read_to_string(path)?;
-
-    Ok(txt)
-}
-
-pub fn load_bytes(file_name: &str) -> anyhow::Result<Vec<u8>> {
-    let path = std::path::Path::new(env!("OUT_DIR"))
-        .join("res")
-        .join(file_name);
-    let data = std::fs::read(path)?;
-
+pub fn load_bytes(file_name: &PathBuf) -> anyhow::Result<Vec<u8>> {
+    let path = std::env::current_dir()?.join("assets").join(file_name);
+    let data = std::fs::read(path.clone()).with_context(|| format!("Failed to read {path:?}"))?;
     Ok(data)
 }
 
 pub fn load_texture(
-    file_name: &str,
+    file_name: &PathBuf,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) -> anyhow::Result<Texture> {
-    let data = load_bytes(file_name)?;
-    Texture::from_bytes(device, queue, &data, file_name)
-}
-
-pub async fn load_obj(
-    file_name: &str,
-) -> anyhow::Result<(
-    Vec<tobj::Model>,
-    Result<Vec<tobj::Material>, tobj::LoadError>,
-)> {
-    let obj_data = load_string(file_name)?;
-    let obj_cursor = Cursor::new(obj_data);
-    let mut obj_reader = BufReader::new(obj_cursor);
-
-    Ok(tobj::load_obj_buf_async(
-        &mut obj_reader,
-        &tobj::LoadOptions {
-            triangulate: true,
-            single_index: true,
-            ..Default::default()
-        },
-        |p| async move {
-            // FIXME this assumes everything is at the root of res/
-            log::info!("Loading {p}");
-            let mat_text = load_string(&p).unwrap();
-            tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
-        },
+    let data =
+        load_bytes(file_name).with_context(|| format!("Failed to load texture {file_name:?}"))?;
+    Texture::from_bytes(
+        device,
+        queue,
+        &data,
+        &file_name.file_name().unwrap().to_string_lossy(),
     )
-    .await?)
+    .with_context(|| "Failed to create Texture from bytes".to_string())
 }
 
 pub fn load_model(
     name: &str,
-    (models, obj_materials): (
-        Vec<tobj::Model>,
-        Result<Vec<tobj::Material>, tobj::LoadError>,
-    ),
+    root_path: &Path,
+    obj_models: &[tobj::Model],
+    obj_materials: &[ObjMaterial],
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> anyhow::Result<Model> {
+    let start = Instant::now();
+
     let mut materials = Vec::new();
-    for m in obj_materials? {
-        let diffuse_texture = load_texture(&m.diffuse_texture, device, queue)?;
+    log::info!("creating Textures from obj materials");
+    for m in obj_materials {
+        if m.diffuse_texture_data.is_empty() {
+            panic!("diffuse_texture is empty");
+        }
+
+        let diffuse_texture = Texture::from_bytes(device, queue, &m.diffuse_texture_data, &m.name)?;
         let bind_group = texture::bind_group(device, layout, &diffuse_texture);
         materials.push(Material {
-            name: m.name,
+            name: m.name.clone(),
             diffuse_texture,
             bind_group,
         });
     }
     if materials.is_empty() {
-        let diffuse_texture = load_texture("pink.png", device, queue)?;
+        let mut path = root_path.to_path_buf();
+        path.pop();
+        path.push("pink.png");
+
+        let diffuse_texture = load_texture(&path, device, queue)?;
         let bind_group = texture::bind_group(device, layout, &diffuse_texture);
         materials.push(Material {
             name: "default texture".to_string(),
@@ -91,9 +73,14 @@ pub fn load_model(
             bind_group,
         });
     }
+    log::info!(
+        "creating Textures from obj materials took {}ms",
+        (Instant::now() - start).as_millis()
+    );
 
-    let meshes: Vec<_> = models
-        .into_iter()
+    log::info!("Creating Mesh buffers");
+    let meshes: Vec<_> = obj_models
+        .iter()
         .map(|m| {
             let vertices: Vec<_> = (0..m.mesh.positions.len() / 3)
                 .map(|i| Vertex {
@@ -121,7 +108,7 @@ pub fn load_model(
 
             let mut mesh = Mesh {
                 vertices,
-                indices: Some(m.mesh.indices),
+                indices: Some(m.mesh.indices.clone()),
             };
 
             if m.mesh.normals.is_empty() {
@@ -137,6 +124,7 @@ pub fn load_model(
             }
         })
         .collect();
+    log::info!("Meshes loaded");
 
     Ok(Model { meshes, materials })
 }

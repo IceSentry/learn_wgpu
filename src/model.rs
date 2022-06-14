@@ -60,6 +60,7 @@ impl Model {
         light_bind_group: &'a wgpu::BindGroup,
     ) {
         for mesh in &self.meshes {
+            // TODO get data from Handle
             let material = &self.materials[mesh.material_id];
             mesh.draw_instanced(
                 render_pass,
