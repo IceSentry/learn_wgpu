@@ -36,10 +36,8 @@ pub struct Camera {
 impl Camera {
     pub fn build_view_projection_matrix(&self) -> Mat4 {
         let view = Mat4::from_rotation_translation(self.rotation, self.eye);
-        let inverse_view = view.inverse();
-        // let view = Mat4::look_at_rh(self.eye, self.target, self.up);
         let proj = Mat4::perspective_rh(self.fov_y, self.aspect, self.z_near, self.z_far);
-        proj * inverse_view
+        proj * view.inverse()
     }
 
     #[inline]

@@ -3,7 +3,6 @@ name = 'learn_wgpu'
 version = '0.1.0'
 authors = ['IceSentry <c.giguere42@gmail.com>']
 edition = '2021'
-build = "src/build.rs"
 
 [profile.dev]
 opt-level = 1

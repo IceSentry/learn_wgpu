@@ -48,7 +48,6 @@ const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 // const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out how to draw lines
-// TODO better camera
 // TODO extract to plugin
 // TODO create buffers and bind groups when needed every frane
 
