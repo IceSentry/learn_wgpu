@@ -114,6 +114,7 @@ fn init_renderer(
 }
 
 fn setup(mut commands: Commands, renderer: Res<WgpuRenderer>) {
+    // TODO init pipelines with render_phase
     let render_pipeline_layout =
         renderer
             .device
@@ -216,7 +217,7 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 }
 
 fn load_obj_asset(asset_server: Res<AssetServer>) {
-    let _: Handle<LoadedObj> = asset_server.load(INSTANCED_MODEL_NAME);
+    // let _: Handle<LoadedObj> = asset_server.load(INSTANCED_MODEL_NAME);
     let _: Handle<LoadedObj> = asset_server.load(MODEL_NAME);
 }
 

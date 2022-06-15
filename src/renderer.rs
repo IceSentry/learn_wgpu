@@ -177,7 +177,8 @@ impl WgpuRenderer {
                     entry_point: "fragment",
                     targets: &[wgpu::ColorTargetState {
                         format: self.config.format,
-                        blend: Some(wgpu::BlendState::REPLACE),
+                        // TODO create an opaque and transparent pipeline with the same shader
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::ALL,
                     }],
                 }),

@@ -41,6 +41,9 @@ impl RenderPhase for RenderPhase3d {
         // TODO the RenderPhase3d should probably own this
         let depth_pass = world.resource::<DepthPass>();
 
+        // TODO to support Transparency, I need to split the entities between transparent and not transparent
+        // I think this could just be done with a Transparent tag
+
         self.opaque_pass.render(world, view, encoder);
 
         if world.resource::<ShowDepthBuffer>().0 {
