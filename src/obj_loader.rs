@@ -30,6 +30,7 @@ pub struct ObjLoader;
 pub struct ObjMaterial {
     pub name: String,
     pub diffuse_texture_data: RgbaImage,
+    pub alpha: f32,
 }
 
 #[derive(Debug, TypeUuid)]
@@ -75,11 +76,8 @@ async fn load_obj<'a, 'b>(
     let path = load_context.path();
     let asset_io = load_context.asset_io();
 
-    let obj_cursor = Cursor::new(bytes);
-    let mut obj_reader = BufReader::new(obj_cursor);
-
     let (obj_models, obj_materials) = tobj::load_obj_buf_async(
-        &mut obj_reader,
+        &mut BufReader::new(Cursor::new(bytes)),
         &tobj::LoadOptions {
             triangulate: true,
             single_index: true,
@@ -135,8 +133,13 @@ async fn load_obj<'a, 'b>(
         materials.push(ObjMaterial {
             name: obj_material.name.clone(),
             diffuse_texture_data: texture,
+            alpha: obj_material.dissolve,
         });
-        log::info!("Finished loading {}", obj_material.name);
+        log::info!(
+            "Finished loading {} {:?}",
+            obj_material.name,
+            obj_material.dissolve
+        );
     }
 
     Ok(LoadedObj {

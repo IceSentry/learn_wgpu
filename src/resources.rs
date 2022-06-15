@@ -56,6 +56,7 @@ pub fn load_model(
         materials.push(Material {
             name: m.name.clone(),
             diffuse_texture,
+            alpha: m.alpha,
             bind_group,
         });
     }
@@ -69,6 +70,7 @@ pub fn load_model(
         materials.push(Material {
             name: "default texture".to_string(),
             diffuse_texture,
+            alpha: 1.0,
             bind_group,
         });
     }

@@ -48,8 +48,15 @@ impl Model {
         render_pass: &mut wgpu::RenderPass<'a>,
         camera_bind_group: &'a wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
+        transparent: bool,
     ) {
-        self.draw_instanced(render_pass, 0..1, camera_bind_group, light_bind_group);
+        self.draw_instanced(
+            render_pass,
+            0..1,
+            camera_bind_group,
+            light_bind_group,
+            transparent,
+        );
     }
 
     pub fn draw_instanced<'a>(
@@ -58,17 +65,31 @@ impl Model {
         instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
+        transparent: bool,
     ) {
         for mesh in &self.meshes {
             // TODO get data from Handle
             let material = &self.materials[mesh.material_id];
-            mesh.draw_instanced(
-                render_pass,
-                instances.clone(),
-                material,
-                camera_bind_group,
-                light_bind_group,
-            );
+
+            if transparent && material.alpha < 1.0 {
+                mesh.draw_instanced(
+                    render_pass,
+                    instances.clone(),
+                    material,
+                    camera_bind_group,
+                    light_bind_group,
+                );
+            }
+
+            if !transparent && material.alpha == 1.0 {
+                mesh.draw_instanced(
+                    render_pass,
+                    instances.clone(),
+                    material,
+                    camera_bind_group,
+                    light_bind_group,
+                );
+            }
         }
     }
 }
@@ -77,6 +98,7 @@ impl Model {
 pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
+    pub alpha: f32,
     // pub normal_texture: Texture,
     pub bind_group: wgpu::BindGroup,
 }

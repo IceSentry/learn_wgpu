@@ -99,6 +99,7 @@ impl DepthPass {
             &pipeline_layout,
             &[Vertex::layout()],
             None,
+            wgpu::BlendState::REPLACE,
         );
 
         Self {

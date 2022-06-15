@@ -1,10 +1,9 @@
-use crate::{model::ModelVertex, renderer::TransformRaw};
 use bevy::{
     asset::AssetPlugin,
     input::InputPlugin,
     math::{const_vec3, vec3},
     prelude::*,
-    window::{WindowPlugin, WindowResized},
+    window::{WindowMode, WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
 use camera::{Camera, CameraUniform};
@@ -15,7 +14,7 @@ use light::Light;
 use model::Model;
 use obj_loader::{LoadedObj, ObjLoaderPlugin};
 use render_phase_3d::{ClearColor, DepthTexture, LightBindGroup, RenderPhase3d};
-use renderer::{Pipeline, Transform, WgpuRenderer};
+use renderer::{Transform, WgpuRenderer};
 use std::path::Path;
 use texture::Texture;
 use winit::dpi::PhysicalSize;
@@ -61,6 +60,7 @@ fn main() {
         .insert_resource(WindowDescriptor {
             // width: 800.0,
             // height: 600.0,
+            // mode: WindowMode::Fullscreen,
             ..default()
         })
         .add_plugins(MinimalPlugins)
@@ -113,74 +113,7 @@ fn init_renderer(
     commands.insert_resource(renderer);
 }
 
-fn setup(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    // TODO init pipelines with render_phase
-    let render_pipeline_layout =
-        renderer
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[
-                    &texture::bind_group_layout(&renderer.device),
-                    &camera::bind_group_layout(&renderer.device),
-                    &Light::bind_group_layout(&renderer.device),
-                ],
-                push_constant_ranges: &[],
-            });
-
-    let render_pipeline = renderer.create_render_pipeline(
-        "Render Pipeline",
-        wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
-        },
-        &render_pipeline_layout,
-        &[model::ModelVertex::layout(), TransformRaw::layout()],
-        Some(wgpu::DepthStencilState {
-            format: Texture::DEPTH_FORMAT,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-    );
-
-    let light_render_pipeline = {
-        let layout = renderer
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Light Pipeline Layout"),
-                bind_group_layouts: &[
-                    &camera::bind_group_layout(&renderer.device),
-                    &Light::bind_group_layout(&renderer.device),
-                ],
-                push_constant_ranges: &[],
-            });
-        let shader = wgpu::ShaderModuleDescriptor {
-            label: Some("Light Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/light.wgsl").into()),
-        };
-        renderer.create_render_pipeline(
-            "Light Render Pipeline",
-            shader,
-            &layout,
-            &[ModelVertex::layout()],
-            Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-        )
-    };
-
-    let pipeline = Pipeline {
-        render_pipeline,
-        light_pipeline: light_render_pipeline,
-    };
-
-    commands.insert_resource(pipeline);
+fn setup(mut commands: Commands) {
     commands.insert_resource(ShowDepthBuffer(false));
     commands.insert_resource(ClearColor(Color::rgba(0.1, 0.2, 0.3, 1.0)));
 }

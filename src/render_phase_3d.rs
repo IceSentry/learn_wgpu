@@ -1,10 +1,11 @@
 use crate::{
+    camera,
     depth_pass::DepthPass,
     instances::InstanceBuffer,
     light::{draw_light_model, Light},
-    model::Model,
-    renderer::{Pipeline, RenderPhase},
-    texture::Texture,
+    model::{self, Model, ModelVertex},
+    renderer::{RenderPhase, TransformRaw, WgpuRenderer},
+    texture::{self, Texture},
     Instances, ShowDepthBuffer,
 };
 use bevy::prelude::{Color, Component, QueryState, With, Without, World};
@@ -19,6 +20,8 @@ pub struct ClearColor(pub Color);
 
 pub struct CameraBindGroup(pub wgpu::BindGroup);
 
+// TODO not sure if I need a concept of RenderPhase I can probably get away
+// with all of this on the renderer as long as I encapsulate render passes
 #[allow(clippy::type_complexity)]
 pub struct RenderPhase3d {
     pub opaque_pass: OpaquePass,
@@ -52,7 +55,15 @@ impl RenderPhase for RenderPhase3d {
     }
 }
 
+#[derive(Component)]
+pub struct Transparent;
+
+// TODO pass could own a pipeline
+#[allow(clippy::type_complexity)]
 pub struct OpaquePass {
+    pub render_pipeline: wgpu::RenderPipeline,
+    pub light_render_pipeline: wgpu::RenderPipeline,
+    pub transparent_render_pipeline: wgpu::RenderPipeline,
     pub light_query: QueryState<&'static Model, With<Light>>,
     pub model_query: QueryState<
         (
@@ -60,28 +71,119 @@ pub struct OpaquePass {
             &'static InstanceBuffer,
             Option<&'static Instances>,
         ),
-        Without<Light>,
+        (Without<Light>, Without<Transparent>),
     >,
-    pub pipeline_query: QueryState<&'static Pipeline>,
+    pub transparent_model_query: QueryState<
+        (
+            &'static Model,
+            &'static InstanceBuffer,
+            Option<&'static Instances>,
+        ),
+        (Without<Light>, With<Transparent>),
+    >,
 }
 
 impl OpaquePass {
     pub fn from_world(world: &mut World) -> Self {
+        let renderer = world.resource::<WgpuRenderer>();
+
+        let render_pipeline_layout =
+            renderer
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Render Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &texture::bind_group_layout(&renderer.device),
+                        &camera::bind_group_layout(&renderer.device),
+                        &Light::bind_group_layout(&renderer.device),
+                    ],
+                    push_constant_ranges: &[],
+                });
+
+        let render_pipeline = renderer.create_render_pipeline(
+            "Opaque Render Pipeline",
+            wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
+            },
+            &render_pipeline_layout,
+            &[model::ModelVertex::layout(), TransformRaw::layout()],
+            Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            wgpu::BlendState::REPLACE,
+        );
+
+        let transparent_render_pipeline = renderer.create_render_pipeline(
+            "Transparent Render Pipeline",
+            wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
+            },
+            &render_pipeline_layout,
+            &[model::ModelVertex::layout(), TransformRaw::layout()],
+            Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            wgpu::BlendState::ALPHA_BLENDING,
+        );
+
+        let light_render_pipeline = {
+            let layout = renderer
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Light Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &camera::bind_group_layout(&renderer.device),
+                        &Light::bind_group_layout(&renderer.device),
+                    ],
+                    push_constant_ranges: &[],
+                });
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Light Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/light.wgsl").into()),
+            };
+            renderer.create_render_pipeline(
+                "Light Render Pipeline",
+                shader,
+                &layout,
+                &[ModelVertex::layout()],
+                Some(wgpu::DepthStencilState {
+                    format: Texture::DEPTH_FORMAT,
+                    depth_write_enabled: false,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                wgpu::BlendState::REPLACE,
+            )
+        };
+
         Self {
+            render_pipeline,
+            light_render_pipeline,
+            transparent_render_pipeline,
             light_query: world.query_filtered(),
             model_query: world.query_filtered(),
-            pipeline_query: world.query_filtered(),
+            transparent_model_query: world.query_filtered(),
         }
     }
 
     pub fn update<'w>(&'w mut self, world: &'w mut World) {
-        self.model_query.update_archetypes(world);
         self.light_query.update_archetypes(world);
-        self.pipeline_query.update_archetypes(world);
+        self.model_query.update_archetypes(world);
+        self.transparent_model_query.update_archetypes(world);
     }
 
     fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
-        let pipeline = world.resource::<Pipeline>();
         let camera_bind_group = world.resource::<CameraBindGroup>();
         let light_bind_group = world.resource::<LightBindGroup>();
         let depth_texture = world.resource::<DepthTexture>();
@@ -112,31 +214,62 @@ impl OpaquePass {
             }),
         });
 
-        for light_model in self.light_query.iter_manual(world) {
-            render_pass.set_pipeline(&pipeline.light_pipeline);
-            draw_light_model(
-                &mut render_pass,
-                light_model,
-                &camera_bind_group.0,
-                &light_bind_group.0,
-            );
-        }
-
-        render_pass.set_pipeline(&pipeline.render_pipeline);
+        // TODO figure out how to sort models
+        render_pass.set_pipeline(&self.render_pipeline);
         for (model, instance_buffer, instances) in self.model_query.iter_manual(world) {
             // The draw function also uses the instance buffer under the hood it simply is of size 1
             render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
-
+            let transparent = false;
             if let Some(instances) = instances {
                 model.draw_instanced(
                     &mut render_pass,
                     0..instances.0.len() as u32,
                     &camera_bind_group.0,
                     &light_bind_group.0,
+                    transparent,
                 );
             } else {
-                model.draw(&mut render_pass, &camera_bind_group.0, &light_bind_group.0);
+                model.draw(
+                    &mut render_pass,
+                    &camera_bind_group.0,
+                    &light_bind_group.0,
+                    transparent,
+                );
             }
+        }
+
+        // TODO I need a better way to identify transparent meshes in a model
+        render_pass.set_pipeline(&self.transparent_render_pipeline);
+        for (model, instance_buffer, instances) in self.model_query.iter_manual(world) {
+            // The draw function also uses the instance buffer under the hood it simply is of size 1
+            render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
+            let transparent = true;
+            if let Some(instances) = instances {
+                model.draw_instanced(
+                    &mut render_pass,
+                    0..instances.0.len() as u32,
+                    &camera_bind_group.0,
+                    &light_bind_group.0,
+                    transparent,
+                );
+            } else {
+                model.draw(
+                    &mut render_pass,
+                    &camera_bind_group.0,
+                    &light_bind_group.0,
+                    transparent,
+                );
+            }
+        }
+
+        render_pass.set_pipeline(&self.light_render_pipeline);
+        for light_model in self.light_query.iter_manual(world) {
+            draw_light_model(
+                &mut render_pass,
+                light_model,
+                &camera_bind_group.0,
+                &light_bind_group.0,
+            );
         }
     }
 }

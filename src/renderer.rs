@@ -6,13 +6,6 @@ use bevy::{
 use wgpu::CommandEncoder;
 use winit::window::Window;
 
-// TODO add these separately to the ECS and query them on demand
-#[derive(Component)]
-pub struct Pipeline {
-    pub render_pipeline: wgpu::RenderPipeline,
-    pub light_pipeline: wgpu::RenderPipeline,
-}
-
 // NOTE: Is this trait necessary?
 pub trait RenderPhase {
     fn update(&mut self, world: &mut World);
@@ -103,6 +96,7 @@ impl TransformRaw {
 
 pub struct WgpuRenderer {
     surface: wgpu::Surface,
+    // TODO device could probably be a separate resource
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
@@ -154,6 +148,7 @@ impl WgpuRenderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_render_pipeline(
         &self,
         label: &str,
@@ -161,6 +156,7 @@ impl WgpuRenderer {
         pipeline_layout: &wgpu::PipelineLayout,
         vertex_layouts: &[wgpu::VertexBufferLayout],
         depth_stencil: Option<wgpu::DepthStencilState>,
+        blend: wgpu::BlendState,
     ) -> wgpu::RenderPipeline {
         let shader = self.device.create_shader_module(&shader);
         self.device
@@ -177,8 +173,7 @@ impl WgpuRenderer {
                     entry_point: "fragment",
                     targets: &[wgpu::ColorTargetState {
                         format: self.config.format,
-                        // TODO create an opaque and transparent pipeline with the same shader
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        blend: Some(blend),
                         write_mask: wgpu::ColorWrites::ALL,
                     }],
                 }),
