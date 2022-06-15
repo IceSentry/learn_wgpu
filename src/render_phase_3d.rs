@@ -1,25 +1,14 @@
-use bevy::prelude::{Color, Component, QueryState, World};
-use wgpu::CommandEncoder;
-
 use crate::{
     depth_pass::DepthPass,
+    instances::InstanceBuffer,
     light::{draw_light_model, Light},
     model::Model,
-    renderer::Pipeline,
+    renderer::{Pipeline, RenderPhase},
     texture::Texture,
-    ShowDepthBuffer,
+    Instances, ShowDepthBuffer,
 };
-
-// NOTE: Is this trait necessary?
-pub trait RenderPhase {
-    fn update(&mut self, world: &mut World);
-    fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut CommandEncoder);
-}
-
-#[derive(Component)]
-pub struct InstanceCount(pub usize);
-#[derive(Component)]
-pub struct InstanceBuffer(pub wgpu::Buffer);
+use bevy::prelude::{Color, Component, QueryState, With, Without, World};
+use wgpu::CommandEncoder;
 
 #[derive(Component)]
 pub struct LightBindGroup(pub wgpu::BindGroup);
@@ -32,12 +21,15 @@ pub struct CameraBindGroup(pub wgpu::BindGroup);
 
 #[allow(clippy::type_complexity)]
 pub struct RenderPhase3d {
-    pub light_query: QueryState<&'static Model, bevy::prelude::With<Light>>,
-    pub model_query: QueryState<(
-        &'static Model,
-        Option<&'static InstanceCount>,
-        &'static InstanceBuffer,
-    )>,
+    pub light_query: QueryState<&'static Model, With<Light>>,
+    pub model_query: QueryState<
+        (
+            &'static Model,
+            &'static InstanceBuffer,
+            Option<&'static Instances>,
+        ),
+        Without<Light>,
+    >,
     pub pipeline_query: QueryState<&'static Pipeline>,
 }
 
@@ -104,19 +96,19 @@ impl RenderPhase for RenderPhase3d {
                 );
             }
 
-            for (model, instance_count, instance_buffer) in self.model_query.iter_manual(world) {
+            render_pass.set_pipeline(&pipeline.render_pipeline);
+            for (model, instance_buffer, instances) in self.model_query.iter_manual(world) {
+                // The draw function also uses the instance buffer under the hood it simply is of size 1
                 render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
 
-                if let Some(InstanceCount(instance_count)) = instance_count {
-                    render_pass.set_pipeline(&pipeline.render_pipeline);
+                if let Some(instances) = instances {
                     model.draw_instanced(
                         &mut render_pass,
-                        0..*instance_count as u32,
+                        0..instances.0.len() as u32,
                         &camera_bind_group.0,
                         &light_bind_group.0,
                     );
                 } else {
-                    render_pass.set_pipeline(&pipeline.render_pipeline);
                     model.draw(&mut render_pass, &camera_bind_group.0, &light_bind_group.0);
                 }
             }

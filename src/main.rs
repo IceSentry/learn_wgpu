@@ -1,4 +1,4 @@
-use crate::{model::ModelVertex, renderer::InstanceRaw};
+use crate::{model::ModelVertex, renderer::TransformRaw};
 use bevy::{
     asset::AssetPlugin,
     input::InputPlugin,
@@ -10,32 +10,30 @@ use bevy::{
 use camera::{Camera, CameraUniform};
 use depth_pass::DepthPass;
 use futures_lite::future;
+use instances::Instances;
 use light::Light;
 use model::Model;
 use obj_loader::{LoadedObj, ObjLoaderPlugin};
-use render_phase::{
-    ClearColor, DepthTexture, InstanceBuffer, InstanceCount, LightBindGroup, RenderPhase3d,
-};
-use renderer::{Instance, Pipeline, WgpuRenderer};
+use render_phase_3d::{ClearColor, DepthTexture, LightBindGroup, RenderPhase3d};
+use renderer::{Pipeline, Transform, WgpuRenderer};
 use std::path::Path;
 use texture::Texture;
-use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
 mod camera;
 mod depth_pass;
+mod instances;
 mod light;
 mod mesh;
 mod model;
 mod obj_loader;
-mod render_phase;
+mod render_phase_3d;
 mod renderer;
 mod resources;
 mod shapes;
 mod texture;
 
-const NUM_INSTANCES_PER_ROW: u32 = 1;
-#[allow(unused)]
+const NUM_INSTANCES_PER_ROW: u32 = 10;
 const SPACE_BETWEEN: f32 = 3.0;
 const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 
@@ -45,8 +43,8 @@ const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
 const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 // const MODEL_NAME: &str = "bunny.obj";
 // const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
-// const MODEL_NAME: &str = "cube/cube.obj";
-// const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
+const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
+const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out how to draw lines
 // TODO extract to plugin
@@ -86,15 +84,18 @@ fn main() {
         .add_system(update_window_title)
         .add_system(update_show_depth)
         .add_system(update_light)
+        .add_system(handle_instanced_obj_loaded)
         .add_system(handle_obj_loaded)
         // .add_system(cursor_moved)
-        // .add_system(move_instances)
+        .add_system(move_instances)
+        .add_system(instances::update_instance_buffer)
+        .add_system(instances::create_instance_buffer)
         .run();
 }
 
 #[derive(Component)]
 struct LightBuffer(wgpu::Buffer);
-struct Instances(Vec<Instance>);
+
 pub struct ShowDepthBuffer(bool);
 
 fn init_renderer(
@@ -133,7 +134,7 @@ fn setup(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
         },
         &render_pipeline_layout,
-        &[model::ModelVertex::layout(), InstanceRaw::layout()],
+        &[model::ModelVertex::layout(), TransformRaw::layout()],
         Some(wgpu::DepthStencilState {
             format: Texture::DEPTH_FORMAT,
             depth_write_enabled: true,
@@ -215,6 +216,7 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 }
 
 fn load_obj_asset(asset_server: Res<AssetServer>) {
+    let _: Handle<LoadedObj> = asset_server.load(INSTANCED_MODEL_NAME);
     let _: Handle<LoadedObj> = asset_server.load(MODEL_NAME);
 }
 
@@ -230,24 +232,57 @@ fn handle_obj_loaded(
         return;
     }
 
-    let loaded_obj = loaded_obj.unwrap();
+    let LoadedObj { models, materials } = loaded_obj.unwrap();
 
     let model = resources::load_model(
-        MODEL_NAME,
-        Path::new(&MODEL_NAME),
-        &loaded_obj.models,
-        &loaded_obj.materials,
+        INSTANCED_MODEL_NAME,
+        Path::new(&INSTANCED_MODEL_NAME),
+        models,
+        materials,
         &renderer.device,
         &renderer.queue,
         &texture::bind_group_layout(&renderer.device),
     )
     .expect("failed to load model from obj");
 
-    let mut instances: Vec<_> = Vec::new();
+    commands.spawn().insert(model).insert(Transform {
+        rotation: Quat::default(),
+        translation: Vec3::ZERO,
+        scale: SCALE,
+    });
+    *mesh_spawned = true;
+}
+
+fn handle_instanced_obj_loaded(
+    mut commands: Commands,
+    obj_assets: ResMut<Assets<LoadedObj>>,
+    asset_server: Res<AssetServer>,
+    renderer: Res<WgpuRenderer>,
+    mut mesh_spawned: Local<bool>,
+) {
+    let loaded_obj = obj_assets.get(&asset_server.get_handle(INSTANCED_MODEL_NAME));
+    if *mesh_spawned || loaded_obj.is_none() {
+        return;
+    }
+
+    let LoadedObj { models, materials } = loaded_obj.unwrap();
+
+    let model = resources::load_model(
+        INSTANCED_MODEL_NAME,
+        Path::new(&INSTANCED_MODEL_NAME),
+        models,
+        materials,
+        &renderer.device,
+        &renderer.queue,
+        &texture::bind_group_layout(&renderer.device),
+    )
+    .expect("failed to load model from obj");
+
+    let mut instances = Vec::new();
     for z in 0..NUM_INSTANCES_PER_ROW {
         for x in 0..NUM_INSTANCES_PER_ROW {
-            // let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-            // let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
 
             let translation = vec3(x as f32, 0.0, z as f32);
             let rotation = if translation == Vec3::ZERO {
@@ -256,31 +291,19 @@ fn handle_obj_loaded(
                 Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
             };
 
-            instances.push(Instance {
+            instances.push(Transform {
                 rotation,
                 translation,
-                scale: SCALE,
+                scale: INSTANCED_SCALE,
             });
         }
     }
 
-    let instance_data: Vec<_> = instances.iter().map(Instance::to_raw).collect();
-
-    let instance_buffer = renderer
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
     commands
         .spawn()
         .insert(model)
-        .insert(InstanceCount(instances.len()))
-        .insert(InstanceBuffer(instance_buffer));
-
-    commands.insert_resource(Instances(instances));
+        .insert(Instances(instances))
+        .insert(Wave::default());
 
     *mesh_spawned = true;
 }
@@ -363,33 +386,17 @@ fn cursor_moved(
     }
 }
 
-#[allow(unused)]
-fn move_instances(
-    renderer: Res<WgpuRenderer>,
-    instances: Option<ResMut<Instances>>,
-    time: Res<Time>,
-    mut wave: Local<Wave>,
-    instance_buffer: Query<&InstanceBuffer>,
-) {
-    let mut instances = match instances {
-        Some(val) => val,
-        None => return,
-    };
-
-    wave.offset += time.delta_seconds() * wave.frequency;
-
-    for instance in instances.0.iter_mut() {
-        instance.translation.y = wave.wave_height(instance.translation.x, instance.translation.z);
+fn move_instances(time: Res<Time>, mut query: Query<(&mut Instances, &mut Wave)>) {
+    for (mut instances, mut wave) in query.iter_mut() {
+        wave.offset += time.delta_seconds() * wave.frequency;
+        for instance in instances.0.iter_mut() {
+            instance.translation.y =
+                wave.wave_height(instance.translation.x, instance.translation.z);
+        }
     }
-
-    let data: Vec<_> = instances.0.iter().map(Instance::to_raw).collect();
-    renderer.queue.write_buffer(
-        &instance_buffer.single().0,
-        0,
-        bytemuck::cast_slice(&data[..]),
-    );
 }
 
+#[derive(Component)]
 pub struct Wave {
     pub amplitude: f32,
     pub wavelength: f32,

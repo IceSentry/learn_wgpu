@@ -1,8 +1,9 @@
-use crate::render_phase::{RenderPhase, RenderPhase3d};
+use crate::render_phase_3d::RenderPhase3d;
 use bevy::{
     math::{Mat3, Mat4, Quat, Vec3},
     prelude::{Component, Mut, World},
 };
+use wgpu::CommandEncoder;
 use winit::window::Window;
 
 // TODO add these separately to the ECS and query them on demand
@@ -12,7 +13,14 @@ pub struct Pipeline {
     pub light_pipeline: wgpu::RenderPipeline,
 }
 
-pub struct Instance {
+// NOTE: Is this trait necessary?
+pub trait RenderPhase {
+    fn update(&mut self, world: &mut World);
+    fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut CommandEncoder);
+}
+
+#[derive(Component)]
+pub struct Transform {
     pub translation: Vec3,
     pub rotation: Quat,
     pub scale: Vec3,
@@ -20,14 +28,14 @@ pub struct Instance {
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceRaw {
+pub struct TransformRaw {
     model: [[f32; 4]; 4],
     normal: [[f32; 3]; 3],
 }
 
-impl Instance {
-    pub fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
+impl Transform {
+    pub fn to_raw(&self) -> TransformRaw {
+        TransformRaw {
             model: Mat4::from_scale_rotation_translation(
                 self.scale,
                 self.rotation,
@@ -39,10 +47,10 @@ impl Instance {
     }
 }
 
-impl InstanceRaw {
+impl TransformRaw {
     pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<TransformRaw>() as wgpu::BufferAddress,
             // We need to switch from using a step mode of Vertex to Instance
             // This means that our shaders will only change to use the next
             // instance when the shader starts processing a new instance

@@ -1,11 +1,10 @@
+use crate::{render_phase_3d::CameraBindGroup, renderer::WgpuRenderer};
 use bevy::{
     input::mouse::MouseMotion,
     math::{const_vec3, vec3},
     prelude::*,
 };
 use wgpu::util::DeviceExt;
-
-use crate::{render_phase::CameraBindGroup, renderer::WgpuRenderer};
 
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 const MAX_SPEED: f32 = 15.0;
