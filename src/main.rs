@@ -1,9 +1,10 @@
 use bevy::{
+    app::AppExit,
     asset::AssetPlugin,
     input::InputPlugin,
     math::{const_vec3, vec3},
     prelude::*,
-    window::{WindowMode, WindowPlugin, WindowResized},
+    window::{WindowPlugin, WindowResized},
     winit::{WinitPlugin, WinitWindows},
 };
 use camera::{Camera, CameraUniform};
@@ -90,6 +91,7 @@ fn main() {
         .add_system(move_instances)
         .add_system(instances::update_instance_buffer)
         .add_system(instances::create_instance_buffer)
+        .add_system(exit_on_esc)
         .run();
 }
 
@@ -355,5 +357,11 @@ impl Wave {
         let k = std::f32::consts::TAU / self.wavelength;
         let r = (x * x + z * z).sqrt();
         self.amplitude * (k * (r - self.offset)).sin()
+    }
+}
+
+fn exit_on_esc(key_input: Res<Input<KeyCode>>, mut exit_events: EventWriter<AppExit>) {
+    if key_input.just_pressed(KeyCode::Escape) {
+        exit_events.send_default();
     }
 }
