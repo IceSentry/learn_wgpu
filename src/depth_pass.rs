@@ -1,6 +1,9 @@
+use crate::{renderer::WgpuRenderer, texture::Texture};
+use bevy::render::render_resource::{encase, ShaderType};
 use wgpu::util::DeviceExt;
 
-use crate::{renderer::WgpuRenderer, texture::Texture};
+const DEFAULT_NEAR: f32 = 0.1;
+const DEFAULT_FAR: f32 = 1000.0;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -52,6 +55,12 @@ const DEPTH_VERTICES: &[Vertex] = &[
 
 const DEPTH_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
+#[derive(ShaderType)]
+struct DepthPassMaterial {
+    near: f32,
+    far: f32,
+}
+
 pub struct DepthPass {
     layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -64,7 +73,15 @@ pub struct DepthPass {
 impl DepthPass {
     pub fn new(renderer: &WgpuRenderer, texture: &Texture) -> Self {
         let layout = DepthPass::bind_group_layout(&renderer.device);
-        let bind_group = DepthPass::bind_group(&renderer.device, &layout, texture);
+        let bind_group = DepthPass::bind_group(
+            &renderer.device,
+            &layout,
+            texture,
+            DepthPassMaterial {
+                near: DEFAULT_NEAR,
+                far: DEFAULT_FAR,
+            },
+        );
 
         let vertex_buffer = renderer
             .device
@@ -113,7 +130,15 @@ impl DepthPass {
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, texture: &Texture) {
-        self.bind_group = DepthPass::bind_group(device, &self.layout, texture);
+        self.bind_group = DepthPass::bind_group(
+            device,
+            &self.layout,
+            texture,
+            DepthPassMaterial {
+                near: DEFAULT_NEAR,
+                far: DEFAULT_FAR,
+            },
+        );
     }
 
     pub fn render(&self, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
@@ -143,6 +168,16 @@ impl DepthPass {
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Depth,
                         multisampled: false,
@@ -151,7 +186,7 @@ impl DepthPass {
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
-                    binding: 1,
+                    binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
@@ -164,17 +199,32 @@ impl DepthPass {
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         texture: &Texture,
+        material: DepthPassMaterial,
     ) -> wgpu::BindGroup {
+        let byte_buffer = [0u8; std::mem::size_of::<f32>() * 2];
+        let mut buffer = encase::UniformBuffer::new(byte_buffer);
+        buffer.write(&material).unwrap();
+
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            contents: buffer.as_ref(),
+            label: None,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("depth_pass.bind_group"),
             layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                    resource: buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
                     resource: wgpu::BindingResource::Sampler(&texture.sampler),
                 },
             ],

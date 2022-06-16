@@ -33,6 +33,19 @@ pub struct Camera {
 }
 
 impl Camera {
+    pub fn new(width: f32, height: f32) -> Self {
+        Self {
+            eye: CAMERRA_EYE,
+            target: vec3(0.0, 0.0, 0.0),
+            up: Vec3::Y,
+            aspect: width / height,
+            fov_y: 45.0,
+            z_near: 0.1,
+            z_far: 1000.0,
+            rotation: Quat::default(),
+        }
+    }
+
     pub fn build_view_projection_matrix(&self) -> Mat4 {
         let view = Mat4::from_rotation_translation(self.rotation, self.eye);
         let proj = Mat4::perspective_rh(self.fov_y, self.aspect, self.z_near, self.z_far);
@@ -88,18 +101,7 @@ impl CameraUniform {
 }
 
 fn setup_camera(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    let width = renderer.config.width as f32;
-    let height = renderer.config.height as f32;
-    let camera = Camera {
-        eye: CAMERRA_EYE,
-        target: vec3(0.0, 0.0, 0.0),
-        up: Vec3::Y,
-        aspect: width / height,
-        fov_y: 45.0,
-        z_near: 0.1,
-        z_far: 1000.0,
-        rotation: Quat::default(),
-    };
+    let camera = Camera::new(renderer.config.width as f32, renderer.config.height as f32);
 
     let mut camera_uniform = CameraUniform::new();
     camera_uniform.update_view_proj(&camera);
