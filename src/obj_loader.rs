@@ -29,6 +29,7 @@ pub struct ObjLoader;
 #[derive(Debug)]
 pub struct ObjMaterial {
     pub name: String,
+    pub diffuse_color: Vec4,
     pub diffuse_texture_data: RgbaImage,
     pub alpha: f32,
 }
@@ -112,7 +113,7 @@ async fn load_obj<'a, 'b>(
         let task = pool.spawn(async move {
             let texture_path = if obj_material.diffuse_texture.is_empty() {
                 // default texture
-                Path::new("pink.png").to_path_buf()
+                Path::new("white.png").to_path_buf()
             } else {
                 let mut texture_path = parent_path.clone();
                 texture_path.push(obj_material.diffuse_texture.clone());
@@ -132,6 +133,7 @@ async fn load_obj<'a, 'b>(
         let (obj_material, texture) = task.await;
         materials.push(ObjMaterial {
             name: obj_material.name.clone(),
+            diffuse_color: Vec3::from(obj_material.diffuse).extend(obj_material.dissolve),
             diffuse_texture_data: texture,
             alpha: obj_material.dissolve,
         });

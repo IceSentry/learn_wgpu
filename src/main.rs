@@ -1,36 +1,34 @@
+use std::path::Path;
+
 use bevy::{
     app::AppExit,
     asset::AssetPlugin,
     input::{Input, InputPlugin},
     math::{const_vec3, vec3, Quat, Vec3},
-    prelude::{
-        default, App, AssetServer, Assets, Color, Commands, Component, EventReader, EventWriter,
-        Handle, IntoExclusiveSystem, KeyCode, Local, Mut, NonSendMut, Query, Res, ResMut,
-        StartupStage, Time, World,
-    },
+    prelude::*,
     window::{CursorMoved, WindowDescriptor, WindowPlugin, WindowResized, Windows},
     winit::{WinitPlugin, WinitWindows},
     MinimalPlugins,
 };
+use futures_lite::future;
+use winit::dpi::PhysicalSize;
+
 use camera::{Camera, CameraUniform};
 use depth_pass::DepthPass;
-use futures_lite::future;
 use instances::Instances;
 use light::Light;
 use model::Model;
 use obj_loader::{LoadedObj, ObjLoaderPlugin};
-use render_phase_3d::{ClearColor, DepthTexture, LightBindGroup, RenderPhase3d};
+use render_phase_3d::{ClearColor, DepthTexture, RenderPhase3d};
 use renderer::WgpuRenderer;
-use std::path::Path;
 use texture::Texture;
 use transform::Transform;
-use winit::dpi::PhysicalSize;
 
+mod bind_groups;
 mod camera;
 mod depth_pass;
 mod instances;
 mod light;
-mod material;
 mod mesh;
 mod model;
 mod obj_loader;
@@ -54,9 +52,9 @@ const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
 const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
-// TODO figure out how to draw lines
+// TODO figure out MSAA
+// TODO figure out how to draw lines and use it to draw wireframes
 // TODO extract to plugin
-// TODO create buffers and bind groups when needed every frane
 
 fn main() {
     env_logger::builder()
@@ -86,13 +84,19 @@ fn main() {
         .add_startup_system(load_obj_asset)
         .add_startup_system_to_stage(
             StartupStage::PostStartup,
-            init_render_phase.exclusive_system(),
+            bind_groups::mesh_view::setup_mesh_view_bind_group,
         )
+        .add_startup_stage_after(
+            StartupStage::PostStartup,
+            "init_render_phase",
+            SystemStage::parallel(),
+        )
+        .add_startup_system_to_stage("init_render_phase", init_render_phase.exclusive_system())
         .add_system(render.exclusive_system())
         .add_system(resize)
         .add_system(update_window_title)
         .add_system(update_show_depth)
-        .add_system(update_light)
+        .add_system(bind_groups::mesh_view::update_light_buffer)
         .add_system(handle_instanced_obj_loaded)
         .add_system(handle_obj_loaded)
         // .add_system(cursor_moved)
@@ -102,9 +106,6 @@ fn main() {
         .add_system(exit_on_esc)
         .run();
 }
-
-#[derive(Component)]
-struct LightBuffer(wgpu::Buffer);
 
 pub struct ShowDepthBuffer(bool);
 
@@ -149,18 +150,15 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     };
 
     let light = Light::new(LIGHT_POSITION, Color::WHITE);
-    let (light_bind_group, light_buffer) = light.bind_group(&renderer.device);
+    // let (light_bind_group, light_buffer) = light.bind_group(&renderer.device);
 
-    commands
-        .spawn()
-        .insert(light)
-        .insert(model)
-        .insert(LightBuffer(light_buffer));
-    commands.insert_resource(LightBindGroup(light_bind_group));
+    commands.spawn().insert(light).insert(model);
+    // .insert(LightBuffer(light_buffer));
+    // commands.insert_resource(LightBindGroup(light_bind_group));
 }
 
 fn load_obj_asset(asset_server: Res<AssetServer>) {
-    // let _: Handle<LoadedObj> = asset_server.load(INSTANCED_MODEL_NAME);
+    let _: Handle<LoadedObj> = asset_server.load(INSTANCED_MODEL_NAME);
     let _: Handle<LoadedObj> = asset_server.load(MODEL_NAME);
 }
 
@@ -292,24 +290,6 @@ fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
 fn update_show_depth(keyboard_input: Res<Input<KeyCode>>, mut draw_depth: ResMut<ShowDepthBuffer>) {
     if keyboard_input.just_pressed(KeyCode::X) {
         draw_depth.0 = !draw_depth.0;
-    }
-}
-
-fn update_light(
-    renderer: Res<WgpuRenderer>,
-    mut query: Query<(&mut Light, &LightBuffer)>,
-    time: Res<Time>,
-) {
-    for (mut light, light_buffer) in query.iter_mut() {
-        let old_position = light.position;
-        light.position =
-            Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * time.delta_seconds())
-                .mul_vec3(old_position.into())
-                .to_array();
-
-        renderer
-            .queue
-            .write_buffer(&light_buffer.0, 0, bytemuck::cast_slice(&[*light]));
     }
 }
 

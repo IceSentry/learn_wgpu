@@ -1,26 +1,23 @@
 use crate::{
-    camera,
+    bind_groups::{
+        material,
+        mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
+    },
     depth_pass::DepthPass,
     instances::InstanceBuffer,
     light::{draw_light_model, Light},
-    material, mesh,
     model::{self, Model, ModelVertex},
     renderer::{RenderPhase, WgpuRenderer},
-    texture::{self, Texture},
+    texture::Texture,
     transform::TransformRaw,
     Instances, ShowDepthBuffer,
 };
 use bevy::prelude::{Color, Component, QueryState, With, Without, World};
 use wgpu::CommandEncoder;
 
-#[derive(Component)]
-pub struct LightBindGroup(pub wgpu::BindGroup);
-
 pub struct DepthTexture(pub Texture);
 
 pub struct ClearColor(pub Color);
-
-pub struct CameraBindGroup(pub wgpu::BindGroup);
 
 // TODO not sure if I need a concept of RenderPhase I can probably get away
 // with all of this on the renderer as long as I encapsulate render passes
@@ -85,32 +82,7 @@ pub struct OpaquePass {
 impl OpaquePass {
     pub fn from_world(world: &mut World) -> Self {
         let renderer = world.resource::<WgpuRenderer>();
-
-        let render_pipeline_layout = {
-            // TODO create_mesh_view_bind_group
-            // let mesh_view_layout =
-            //     renderer
-            //         .device
-            //         .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            //             label: Some("mesh_view_bind_group_layout"),
-            //             entries: &[
-            //                 // Camera
-            //                 camera::bind_group_layout_entry(0),
-            //                 // Light
-            //                 Light::bind_group_layout_entry(1),
-            //             ],
-            //         });
-            // TODO consider storing layouts in ECS
-            // let material_layout = material::bind_group_layout(&renderer.device);
-            // let mesh_layout = mesh::bind_group_layout(&renderer.device);
-            // renderer
-            //     .device
-            //     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            //         label: Some("Render Pipeline Layout"),
-            //         bind_group_layouts: &[&mesh_view_layout, &material_layout, &mesh_layout],
-            //         push_constant_ranges: &[],
-            //     })
-        };
+        let mesh_view_layout = world.resource::<MeshViewBindGroupLayout>();
 
         let render_pipeline_layout =
             renderer
@@ -118,8 +90,7 @@ impl OpaquePass {
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
                     bind_group_layouts: &[
-                        &camera::bind_group_layout(&renderer.device),
-                        &Light::bind_group_layout(&renderer.device),
+                        &mesh_view_layout.0,
                         &material::bind_group_layout(&renderer.device),
                     ],
                     push_constant_ranges: &[],
@@ -163,10 +134,7 @@ impl OpaquePass {
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Light Pipeline Layout"),
-                    bind_group_layouts: &[
-                        &camera::bind_group_layout(&renderer.device),
-                        &Light::bind_group_layout(&renderer.device),
-                    ],
+                    bind_group_layouts: &[&mesh_view_layout.0],
                     push_constant_ranges: &[],
                 }),
             &[ModelVertex::layout()],
@@ -197,8 +165,7 @@ impl OpaquePass {
     }
 
     fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
-        let camera_bind_group = world.resource::<CameraBindGroup>();
-        let light_bind_group = world.resource::<LightBindGroup>();
+        let mesh_view_bind_group = world.resource::<MeshViewBindGroup>();
         let depth_texture = world.resource::<DepthTexture>();
         let clear_color = world.resource::<ClearColor>();
 
@@ -237,17 +204,11 @@ impl OpaquePass {
                 model.draw_instanced(
                     &mut render_pass,
                     0..instances.0.len() as u32,
-                    &camera_bind_group.0,
-                    &light_bind_group.0,
+                    &mesh_view_bind_group.0,
                     transparent,
                 );
             } else {
-                model.draw(
-                    &mut render_pass,
-                    &camera_bind_group.0,
-                    &light_bind_group.0,
-                    transparent,
-                );
+                model.draw(&mut render_pass, &mesh_view_bind_group.0, transparent);
             }
         }
 
@@ -261,28 +222,17 @@ impl OpaquePass {
                 model.draw_instanced(
                     &mut render_pass,
                     0..instances.0.len() as u32,
-                    &camera_bind_group.0,
-                    &light_bind_group.0,
+                    &mesh_view_bind_group.0,
                     transparent,
                 );
             } else {
-                model.draw(
-                    &mut render_pass,
-                    &camera_bind_group.0,
-                    &light_bind_group.0,
-                    transparent,
-                );
+                model.draw(&mut render_pass, &mesh_view_bind_group.0, transparent);
             }
         }
 
         render_pass.set_pipeline(&self.light_render_pipeline);
         for light_model in self.light_query.iter_manual(world) {
-            draw_light_model(
-                &mut render_pass,
-                light_model,
-                &camera_bind_group.0,
-                &light_bind_group.0,
-            );
+            draw_light_model(&mut render_pass, light_model, &mesh_view_bind_group.0);
         }
     }
 }

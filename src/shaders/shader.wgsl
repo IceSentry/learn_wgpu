@@ -9,18 +9,18 @@ struct Light {
     position: vec3<f32>;
     color: vec3<f32>;
 };
-[[group(1), binding(0)]]
+[[group(0), binding(1)]]
 var<uniform> light: Light;
 
 struct Material {
     base_color: vec4<f32>;
     alpha: f32;
 };
-[[group(2), binding(0)]]
+[[group(1), binding(0)]]
 var<uniform> material: Material;
-[[group(2), binding(1)]]
+[[group(1), binding(1)]]
 var t_diffuse: texture_2d<f32>;
-[[group(2), binding(2)]]
+[[group(1), binding(2)]]
 var s_diffuse: sampler;
 
 struct Vertex {
@@ -28,7 +28,6 @@ struct Vertex {
     [[location(1)]] normal: vec3<f32>;
     [[location(2)]] uv: vec2<f32>;
 };
-
 struct InstanceInput {
     [[location(5)]] transform_matrix_0: vec4<f32>;
     [[location(6)]] transform_matrix_1: vec4<f32>;
@@ -47,23 +46,30 @@ struct VertexOutput {
     // [[location(3)]] color: vec4<f32>;
 };
 
-[[stage(vertex)]]
-fn vertex(
-    vertex: Vertex,
-    instance: InstanceInput,
-) -> VertexOutput {
-    let model_matrix = mat4x4<f32>(
+fn build_model_matrix(instance: InstanceInput) -> mat4x4<f32> {
+    return mat4x4<f32>(
         instance.transform_matrix_0,
         instance.transform_matrix_1,
         instance.transform_matrix_2,
         instance.transform_matrix_3,
     );
+}
 
-    let normal_matrix = mat3x3<f32>(
+fn build_normal_matrix(instance: InstanceInput) -> mat3x3<f32> {
+    return mat3x3<f32>(
         instance.normal_matrix_0,
         instance.normal_matrix_1,
         instance.normal_matrix_2,
     );
+}
+
+[[stage(vertex)]]
+fn vertex(
+    vertex: Vertex,
+    instance: InstanceInput,
+) -> VertexOutput {
+    let model_matrix = build_model_matrix(instance);
+    let normal_matrix = build_normal_matrix(instance);
 
     var out: VertexOutput;
     out.uv = vertex.uv;
@@ -94,10 +100,11 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let specular_strength = pow(max(dot(in.world_normal, half_dir), 0.0), 32.0);
     let specular_color = specular_strength * light.color;
 
-    let result = (ambient_color + diffuse_color + specular_color) * color.rgb;
+    let result = (ambient_color + diffuse_color + specular_color) * color.rgb * material.base_color.rgb;
     // let result = specular_color;
     // let result = specular_color * in.world_normal;
     // let result = in.world_normal;
+    // let result = material.base_color.rgb;
 
     return vec4<f32>(result, color.a);
 }

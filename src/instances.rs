@@ -14,7 +14,7 @@ pub struct InstanceBuffer(pub wgpu::Buffer);
 #[derive(Component)]
 pub struct Instances(pub Vec<Transform>);
 
-/// Creates the necessary IntanceBuffer on any Model created with a Transform or Instances
+/// Creates the necessary IntanceBuffer on any Model created with a Model and a Transform or Instances
 #[allow(clippy::type_complexity)]
 pub fn create_instance_buffer(
     mut commands: Commands,

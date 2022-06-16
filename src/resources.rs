@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    material::{self, MaterialUniform},
+    bind_groups::material::{self, MaterialUniform},
     mesh::{Mesh, Vertex},
     model::{Material, Model, ModelMesh},
     obj_loader::ObjMaterial,
-    texture::{self, Texture},
+    texture::Texture,
 };
 use anyhow::Context;
 use bevy::{
@@ -55,7 +55,7 @@ pub fn load_model(
         let bind_group = material::create_bind_group(
             device,
             &MaterialUniform {
-                base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                base_color: m.diffuse_color,
                 alpha: 1.0,
             },
             &diffuse_texture,
@@ -76,7 +76,7 @@ pub fn load_model(
         let bind_group = material::create_bind_group(
             device,
             &MaterialUniform {
-                base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                base_color: Vec4::new(1.0, 0.0, 0.0, 1.0),
                 alpha: 1.0,
             },
             &diffuse_texture,

@@ -1,10 +1,5 @@
-use bevy::{
-    math::{Mat3, Mat4, Vec2, Vec3},
-    render::render_resource::{encase, ShaderType},
-};
+use bevy::math::{Vec2, Vec3};
 use wgpu::util::DeviceExt;
-
-use crate::{model::ModelMesh, transform::Transform};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -86,62 +81,4 @@ impl Mesh {
             }
         }
     }
-}
-
-#[derive(ShaderType)]
-pub struct MeshUniform {
-    transform: Mat4,
-    normal: Mat3,
-}
-
-impl MeshUniform {
-    fn from_mesh(transform: Transform) -> Self {
-        Self {
-            transform: Mat4::from_scale_rotation_translation(
-                transform.scale,
-                transform.rotation,
-                transform.translation,
-            ),
-            normal: Mat3::from_quat(transform.rotation),
-        }
-    }
-}
-
-pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("mesh_bind_group_layout"),
-        entries: &[
-            // transform
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
-    })
-}
-
-pub fn create_bind_group(device: &wgpu::Device, mesh: &MeshUniform) -> wgpu::BindGroup {
-    let mut buffer = encase::UniformBuffer::new(Vec::new());
-    buffer.write(&mesh).unwrap();
-
-    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        contents: buffer.as_ref(),
-        label: None,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("mesh_bind_group"),
-        layout: &bind_group_layout(device),
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: buffer.as_entire_binding(),
-        }],
-    })
 }

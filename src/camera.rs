@@ -1,10 +1,10 @@
-use crate::{render_phase_3d::CameraBindGroup, renderer::WgpuRenderer};
 use bevy::{
     input::mouse::MouseMotion,
     math::{const_vec3, vec3},
     prelude::*,
 };
-use wgpu::util::DeviceExt;
+
+use crate::{bind_groups::mesh_view::update_camera_buffer, renderer::WgpuRenderer};
 
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 const MAX_SPEED: f32 = 15.0;
@@ -18,8 +18,6 @@ impl Plugin for CameraPlugin {
             .add_system(update_camera_buffer);
     }
 }
-
-struct CameraBuffer(wgpu::Buffer);
 
 pub struct Camera {
     pub eye: Vec3,
@@ -106,20 +104,8 @@ fn setup_camera(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     let mut camera_uniform = CameraUniform::new();
     camera_uniform.update_view_proj(&camera);
 
-    let camera_buffer = renderer
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[camera_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-    let camera_bind_group = bind_group(&renderer.device, &camera_buffer);
-
     commands.insert_resource(camera);
     commands.insert_resource(camera_uniform);
-    commands.insert_resource(CameraBuffer(camera_buffer));
-    commands.insert_resource(CameraBindGroup(camera_bind_group));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -193,51 +179,4 @@ fn fly_camera(
     let forward = camera.forward();
     let right = camera.right();
     camera.eye += velocity.x * dt * right + velocity.y * dt * Vec3::Y + velocity.z * dt * forward;
-}
-
-fn update_camera_buffer(
-    renderer: Res<WgpuRenderer>,
-    camera: Res<Camera>,
-    camera_buffer: Res<CameraBuffer>,
-    mut camera_uniform: ResMut<CameraUniform>,
-) {
-    if camera.is_changed() {
-        camera_uniform.update_view_proj(&camera);
-        renderer.queue.write_buffer(
-            &camera_buffer.0,
-            0,
-            bytemuck::cast_slice(&[*camera_uniform]),
-        );
-    }
-}
-
-pub fn bind_group_layout_entry(binding_offset: u32) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding: binding_offset,
-        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-        ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        },
-        count: None,
-    }
-}
-
-pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("camera_bind_group_layout"),
-        entries: &[bind_group_layout_entry(0)],
-    })
-}
-
-pub fn bind_group(device: &wgpu::Device, camera_buffer: &wgpu::Buffer) -> wgpu::BindGroup {
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("camera_bind_group"),
-        layout: &bind_group_layout(device),
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: camera_buffer.as_entire_binding(),
-        }],
-    })
 }
