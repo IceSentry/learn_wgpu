@@ -10,13 +10,13 @@ use bevy::{
     winit::{WinitPlugin, WinitWindows},
     MinimalPlugins,
 };
+use bind_groups::mesh_view::{CameraUniform, LightUniform};
 use futures_lite::future;
 use winit::dpi::PhysicalSize;
 
-use camera::{Camera, CameraUniform};
+use camera::Camera;
 use depth_pass::DepthPass;
 use instances::Instances;
-use light::Light;
 use model::Model;
 use obj_loader::{LoadedObj, ObjLoaderPlugin};
 use render_phase_3d::{ClearColor, DepthTexture, RenderPhase3d};
@@ -39,7 +39,7 @@ mod shapes;
 mod texture;
 mod transform;
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
+const NUM_INSTANCES_PER_ROW: u32 = 6;
 const SPACE_BETWEEN: f32 = 3.0;
 const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 
@@ -149,12 +149,9 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         materials: vec![],
     };
 
-    let light = Light::new(LIGHT_POSITION, Color::WHITE);
-    // let (light_bind_group, light_buffer) = light.bind_group(&renderer.device);
+    let light = LightUniform::new(LIGHT_POSITION, Color::WHITE);
 
     commands.spawn().insert(light).insert(model);
-    // .insert(LightBuffer(light_buffer));
-    // commands.insert_resource(LightBindGroup(light_bind_group));
 }
 
 fn load_obj_asset(asset_server: Res<AssetServer>) {
@@ -219,8 +216,8 @@ fn handle_instanced_obj_loaded(
     .expect("failed to load model from obj");
 
     let mut instances = Vec::new();
-    for z in 0..NUM_INSTANCES_PER_ROW {
-        for x in 0..NUM_INSTANCES_PER_ROW {
+    for z in 0..=NUM_INSTANCES_PER_ROW {
+        for x in 0..=NUM_INSTANCES_PER_ROW {
             let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
             let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
 

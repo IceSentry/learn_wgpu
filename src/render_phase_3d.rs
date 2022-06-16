@@ -1,11 +1,11 @@
 use crate::{
     bind_groups::{
         material,
-        mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
+        mesh_view::{LightUniform, MeshViewBindGroup, MeshViewBindGroupLayout},
     },
     depth_pass::DepthPass,
     instances::InstanceBuffer,
-    light::{draw_light_model, Light},
+    light::draw_light_model,
     model::{self, Model, ModelVertex},
     renderer::{RenderPhase, WgpuRenderer},
     texture::Texture,
@@ -60,14 +60,14 @@ pub struct OpaquePass {
     pub render_pipeline: wgpu::RenderPipeline,
     pub light_render_pipeline: wgpu::RenderPipeline,
     pub transparent_render_pipeline: wgpu::RenderPipeline,
-    pub light_query: QueryState<&'static Model, With<Light>>,
+    pub light_query: QueryState<&'static Model, With<LightUniform>>,
     pub model_query: QueryState<
         (
             &'static Model,
             &'static InstanceBuffer,
             Option<&'static Instances>,
         ),
-        (Without<Light>, Without<Transparent>),
+        (Without<LightUniform>, Without<Transparent>),
     >,
     pub transparent_model_query: QueryState<
         (
@@ -75,7 +75,7 @@ pub struct OpaquePass {
             &'static InstanceBuffer,
             Option<&'static Instances>,
         ),
-        (Without<Light>, With<Transparent>),
+        (Without<LightUniform>, With<Transparent>),
     >,
 }
 

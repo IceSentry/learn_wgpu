@@ -1,11 +1,50 @@
 use bevy::prelude::*;
 use wgpu::util::DeviceExt;
 
-use crate::{
-    camera::{Camera, CameraUniform},
-    light::Light,
-    renderer::WgpuRenderer,
-};
+use crate::{camera::Camera, renderer::WgpuRenderer};
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CameraUniform {
+    view_position: [f32; 4],
+    view_proj: [[f32; 4]; 4],
+}
+
+impl CameraUniform {
+    pub fn new() -> Self {
+        Self {
+            view_position: [0.0; 4],
+            view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+        }
+    }
+
+    pub fn update_view_proj(&mut self, camera: &Camera) {
+        self.view_position = [camera.eye.x, camera.eye.y, camera.eye.z, 1.0];
+        self.view_proj = camera.build_view_projection_matrix().to_cols_array_2d();
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Component)]
+pub struct LightUniform {
+    pub position: [f32; 3],
+    // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
+    _padding: u32,
+    pub color: [f32; 3],
+    // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
+    _padding2: u32,
+}
+
+impl LightUniform {
+    pub fn new(position: Vec3, color: Color) -> Self {
+        Self {
+            position: position.to_array(),
+            _padding: 0,
+            color: [color.r(), color.g(), color.b()],
+            _padding2: 0,
+        }
+    }
+}
 
 pub struct CameraBuffer(pub wgpu::Buffer);
 
@@ -19,7 +58,7 @@ pub fn setup_mesh_view_bind_group(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
     camera_uniform: Res<CameraUniform>,
-    light: Query<&Light>,
+    light: Query<&LightUniform>,
 ) {
     let mesh_view_layout =
         renderer
@@ -109,7 +148,7 @@ pub fn update_camera_buffer(
 
 pub fn update_light_buffer(
     renderer: Res<WgpuRenderer>,
-    mut query: Query<&mut Light>,
+    mut query: Query<&mut LightUniform>,
     light_buffer: Res<LightBuffer>,
     time: Res<Time>,
 ) {

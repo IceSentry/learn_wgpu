@@ -4,7 +4,10 @@ use bevy::{
     prelude::*,
 };
 
-use crate::{bind_groups::mesh_view::update_camera_buffer, renderer::WgpuRenderer};
+use crate::{
+    bind_groups::mesh_view::{update_camera_buffer, CameraUniform},
+    renderer::WgpuRenderer,
+};
 
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 const MAX_SPEED: f32 = 15.0;
@@ -74,27 +77,6 @@ impl Camera {
     #[inline]
     pub fn local_z(&self) -> Vec3 {
         self.rotation * Vec3::Z
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct CameraUniform {
-    view_position: [f32; 4],
-    view_proj: [[f32; 4]; 4],
-}
-
-impl CameraUniform {
-    pub fn new() -> Self {
-        Self {
-            view_position: [0.0; 4],
-            view_proj: Mat4::IDENTITY.to_cols_array_2d(),
-        }
-    }
-
-    pub fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_position = [camera.eye.x, camera.eye.y, camera.eye.z, 1.0];
-        self.view_proj = camera.build_view_projection_matrix().to_cols_array_2d();
     }
 }
 

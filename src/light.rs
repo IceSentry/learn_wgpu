@@ -1,33 +1,6 @@
 use std::ops::Range;
 
-use bevy::{
-    math::Vec3,
-    prelude::{Color, Component},
-};
-
 use crate::model::{Model, ModelMesh};
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Component)]
-pub struct Light {
-    pub position: [f32; 3],
-    // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
-    _padding: u32,
-    pub color: [f32; 3],
-    // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
-    _padding2: u32,
-}
-
-impl Light {
-    pub fn new(position: Vec3, color: Color) -> Self {
-        Self {
-            position: position.to_array(),
-            _padding: 0,
-            color: [color.r(), color.g(), color.b()],
-            _padding2: 0,
-        }
-    }
-}
 
 #[allow(unused)]
 fn draw_light_mesh<'a>(
