@@ -12,9 +12,15 @@ struct Light {
 [[group(1), binding(0)]]
 var<uniform> light: Light;
 
+struct Material {
+    base_color: vec4<f32>;
+    alpha: f32;
+};
 [[group(2), binding(0)]]
-var t_diffuse: texture_2d<f32>;
+var<uniform> material: Material;
 [[group(2), binding(1)]]
+var t_diffuse: texture_2d<f32>;
+[[group(2), binding(2)]]
 var s_diffuse: sampler;
 
 struct Vertex {

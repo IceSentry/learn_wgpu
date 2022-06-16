@@ -120,7 +120,7 @@ impl OpaquePass {
                     bind_group_layouts: &[
                         &camera::bind_group_layout(&renderer.device),
                         &Light::bind_group_layout(&renderer.device),
-                        &texture::bind_group_layout(&renderer.device),
+                        &material::bind_group_layout(&renderer.device),
                     ],
                     push_constant_ranges: &[],
                 });
