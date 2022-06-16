@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
+    material::{self, MaterialUniform},
     mesh::{Mesh, Vertex},
     model::{Material, Model, ModelMesh},
     obj_loader::ObjMaterial,
@@ -8,7 +9,7 @@ use crate::{
 };
 use anyhow::Context;
 use bevy::{
-    math::{Vec2, Vec3},
+    math::{Vec2, Vec3, Vec4},
     utils::Instant,
 };
 
@@ -42,7 +43,6 @@ pub fn load_model(
     obj_materials: &[ObjMaterial],
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    layout: &wgpu::BindGroupLayout,
 ) -> anyhow::Result<Model> {
     let start = Instant::now();
 
@@ -52,7 +52,14 @@ pub fn load_model(
     for m in obj_materials {
         let diffuse_texture =
             Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name))?;
-        let bind_group = texture::bind_group(device, layout, &diffuse_texture);
+        let bind_group = material::create_bind_group(
+            device,
+            &MaterialUniform {
+                base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                alpha: 1.0,
+            },
+            &diffuse_texture,
+        );
         materials.push(Material {
             name: m.name.clone(),
             diffuse_texture,
@@ -66,7 +73,14 @@ pub fn load_model(
         path.push("pink.png");
 
         let diffuse_texture = load_texture(&path, device, queue)?;
-        let bind_group = texture::bind_group(device, layout, &diffuse_texture);
+        let bind_group = material::create_bind_group(
+            device,
+            &MaterialUniform {
+                base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                alpha: 1.0,
+            },
+            &diffuse_texture,
+        );
         materials.push(Material {
             name: "default texture".to_string(),
             diffuse_texture,

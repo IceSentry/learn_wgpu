@@ -1,11 +1,16 @@
 use bevy::{
     app::AppExit,
     asset::AssetPlugin,
-    input::InputPlugin,
-    math::{const_vec3, vec3},
-    prelude::*,
-    window::{WindowPlugin, WindowResized},
+    input::{Input, InputPlugin},
+    math::{const_vec3, vec3, Quat, Vec3},
+    prelude::{
+        default, App, AssetServer, Assets, Color, Commands, Component, EventReader, EventWriter,
+        Handle, IntoExclusiveSystem, KeyCode, Local, Mut, NonSendMut, Query, Res, ResMut,
+        StartupStage, Time, World,
+    },
+    window::{CursorMoved, WindowDescriptor, WindowPlugin, WindowResized, Windows},
     winit::{WinitPlugin, WinitWindows},
+    MinimalPlugins,
 };
 use camera::{Camera, CameraUniform};
 use depth_pass::DepthPass;
@@ -15,15 +20,17 @@ use light::Light;
 use model::Model;
 use obj_loader::{LoadedObj, ObjLoaderPlugin};
 use render_phase_3d::{ClearColor, DepthTexture, LightBindGroup, RenderPhase3d};
-use renderer::{Transform, WgpuRenderer};
+use renderer::WgpuRenderer;
 use std::path::Path;
 use texture::Texture;
+use transform::Transform;
 use winit::dpi::PhysicalSize;
 
 mod camera;
 mod depth_pass;
 mod instances;
 mod light;
+mod material;
 mod mesh;
 mod model;
 mod obj_loader;
@@ -32,6 +39,7 @@ mod renderer;
 mod resources;
 mod shapes;
 mod texture;
+mod transform;
 
 const NUM_INSTANCES_PER_ROW: u32 = 10;
 const SPACE_BETWEEN: f32 = 3.0;
@@ -177,7 +185,6 @@ fn handle_obj_loaded(
         materials,
         &renderer.device,
         &renderer.queue,
-        &texture::bind_group_layout(&renderer.device),
     )
     .expect("failed to load model from obj");
 
@@ -210,7 +217,6 @@ fn handle_instanced_obj_loaded(
         materials,
         &renderer.device,
         &renderer.queue,
-        &texture::bind_group_layout(&renderer.device),
     )
     .expect("failed to load model from obj");
 

@@ -109,10 +109,7 @@ impl DepthPass {
 
         let render_pipeline = renderer.create_render_pipeline(
             "Depth Pass Render Pipeline",
-            wgpu::ShaderModuleDescriptor {
-                label: Some("Depth Pass Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/depth.wgsl").into()),
-            },
+            include_str!("shaders/depth.wgsl"),
             &pipeline_layout,
             &[Vertex::layout()],
             None,

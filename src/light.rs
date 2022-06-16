@@ -8,7 +8,6 @@ use wgpu::util::DeviceExt;
 
 use crate::model::{Model, ModelMesh};
 
-// main.rs
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Component)]
 pub struct Light {
@@ -32,18 +31,22 @@ impl Light {
 
     pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
+            entries: &[Light::bind_group_layout_entry(0)],
             label: None,
         })
+    }
+
+    pub fn bind_group_layout_entry(binding_offset: u32) -> wgpu::BindGroupLayoutEntry {
+        wgpu::BindGroupLayoutEntry {
+            binding: binding_offset,
+            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }
     }
 
     pub fn bind_group(&self, device: &wgpu::Device) -> (wgpu::BindGroup, wgpu::Buffer) {

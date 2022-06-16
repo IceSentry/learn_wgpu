@@ -1,26 +1,26 @@
-[[group(0), binding(0)]]
-var t_diffuse: texture_2d<f32>;
-[[group(0), binding(1)]]
-var s_diffuse: sampler;
-
 struct CameraUniform {
     view_pos: vec4<f32>;
     view_proj: mat4x4<f32>;
 };
-[[group(1), binding(0)]]
+[[group(0), binding(0)]]
 var<uniform> camera: CameraUniform;
 
 struct Light {
     position: vec3<f32>;
     color: vec3<f32>;
 };
-[[group(2), binding(0)]]
+[[group(1), binding(0)]]
 var<uniform> light: Light;
+
+[[group(2), binding(0)]]
+var t_diffuse: texture_2d<f32>;
+[[group(2), binding(1)]]
+var s_diffuse: sampler;
 
 struct Vertex {
     [[location(0)]] position: vec3<f32>;
-    [[location(1)]] uv: vec2<f32>;
-    [[location(2)]] normal: vec3<f32>;
+    [[location(1)]] normal: vec3<f32>;
+    [[location(2)]] uv: vec2<f32>;
 };
 
 struct InstanceInput {
@@ -35,9 +35,10 @@ struct InstanceInput {
 
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(0)]] uv: vec2<f32>;
+    [[location(0)]] world_position: vec3<f32>;
     [[location(1)]] world_normal: vec3<f32>;
-    [[location(2)]] world_position: vec3<f32>;
+    [[location(2)]] uv: vec2<f32>;
+    // [[location(3)]] color: vec4<f32>;
 };
 
 [[stage(vertex)]]

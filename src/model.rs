@@ -6,8 +6,8 @@ use std::ops::Range;
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ModelVertex {
     pub position: [f32; 3],
-    pub uv: [f32; 2],
     pub normal: [f32; 3],
+    pub uv: [f32; 2],
 }
 
 impl ModelVertex {
@@ -24,12 +24,12 @@ impl ModelVertex {
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
                     shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
             ],
         }
@@ -141,9 +141,9 @@ impl ModelMesh {
     ) {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.set_bind_group(0, &material.bind_group, &[]);
-        render_pass.set_bind_group(1, camera_bind_group, &[]);
-        render_pass.set_bind_group(2, light_bind_group, &[]);
+        render_pass.set_bind_group(0, camera_bind_group, &[]);
+        render_pass.set_bind_group(1, light_bind_group, &[]);
+        render_pass.set_bind_group(2, &material.bind_group, &[]);
         render_pass.draw_indexed(0..self.num_elements, 0, instances);
     }
 }

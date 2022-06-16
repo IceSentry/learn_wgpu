@@ -3,9 +3,11 @@ use crate::{
     depth_pass::DepthPass,
     instances::InstanceBuffer,
     light::{draw_light_model, Light},
+    material, mesh,
     model::{self, Model, ModelVertex},
-    renderer::{RenderPhase, TransformRaw, WgpuRenderer},
+    renderer::{RenderPhase, WgpuRenderer},
     texture::{self, Texture},
+    transform::TransformRaw,
     Instances, ShowDepthBuffer,
 };
 use bevy::prelude::{Color, Component, QueryState, With, Without, World};
@@ -84,25 +86,49 @@ impl OpaquePass {
     pub fn from_world(world: &mut World) -> Self {
         let renderer = world.resource::<WgpuRenderer>();
 
+        let render_pipeline_layout = {
+            // TODO create_mesh_view_bind_group
+            // let mesh_view_layout =
+            //     renderer
+            //         .device
+            //         .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            //             label: Some("mesh_view_bind_group_layout"),
+            //             entries: &[
+            //                 // Camera
+            //                 camera::bind_group_layout_entry(0),
+            //                 // Light
+            //                 Light::bind_group_layout_entry(1),
+            //             ],
+            //         });
+            // TODO consider storing layouts in ECS
+            // let material_layout = material::bind_group_layout(&renderer.device);
+            // let mesh_layout = mesh::bind_group_layout(&renderer.device);
+            // renderer
+            //     .device
+            //     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            //         label: Some("Render Pipeline Layout"),
+            //         bind_group_layouts: &[&mesh_view_layout, &material_layout, &mesh_layout],
+            //         push_constant_ranges: &[],
+            //     })
+        };
+
         let render_pipeline_layout =
             renderer
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
                     bind_group_layouts: &[
-                        &texture::bind_group_layout(&renderer.device),
                         &camera::bind_group_layout(&renderer.device),
                         &Light::bind_group_layout(&renderer.device),
+                        &texture::bind_group_layout(&renderer.device),
                     ],
                     push_constant_ranges: &[],
                 });
 
+        // TODO have a better way to attach draw commands to a pipeline
         let render_pipeline = renderer.create_render_pipeline(
             "Opaque Render Pipeline",
-            wgpu::ShaderModuleDescriptor {
-                label: Some("Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
-            },
+            include_str!("shaders/shader.wgsl"),
             &render_pipeline_layout,
             &[model::ModelVertex::layout(), TransformRaw::layout()],
             Some(wgpu::DepthStencilState {
@@ -117,10 +143,7 @@ impl OpaquePass {
 
         let transparent_render_pipeline = renderer.create_render_pipeline(
             "Transparent Render Pipeline",
-            wgpu::ShaderModuleDescriptor {
-                label: Some("Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
-            },
+            include_str!("shaders/shader.wgsl"),
             &render_pipeline_layout,
             &[model::ModelVertex::layout(), TransformRaw::layout()],
             Some(wgpu::DepthStencilState {
@@ -133,8 +156,10 @@ impl OpaquePass {
             wgpu::BlendState::ALPHA_BLENDING,
         );
 
-        let light_render_pipeline = {
-            let layout = renderer
+        let light_render_pipeline = renderer.create_render_pipeline(
+            "Light Render Pipeline",
+            include_str!("shaders/light.wgsl"),
+            &renderer
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Light Pipeline Layout"),
@@ -143,26 +168,17 @@ impl OpaquePass {
                         &Light::bind_group_layout(&renderer.device),
                     ],
                     push_constant_ranges: &[],
-                });
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Light Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/light.wgsl").into()),
-            };
-            renderer.create_render_pipeline(
-                "Light Render Pipeline",
-                shader,
-                &layout,
-                &[ModelVertex::layout()],
-                Some(wgpu::DepthStencilState {
-                    format: Texture::DEPTH_FORMAT,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
                 }),
-                wgpu::BlendState::REPLACE,
-            )
-        };
+            &[ModelVertex::layout()],
+            Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            wgpu::BlendState::REPLACE,
+        );
 
         Self {
             render_pipeline,

@@ -1,9 +1,10 @@
-use crate::{model::Model, Transform};
-use bevy::prelude::*;
+use bevy::prelude::{Added, Changed, Commands, Component, Entity, Query, Res, With, Without};
 use wgpu::util::DeviceExt;
 
 use crate::renderer::WgpuRenderer;
+use crate::{model::Model, transform::Transform};
 
+// TODO store uniform buffer instead
 #[derive(Component)]
 pub struct InstanceBuffer(pub wgpu::Buffer);
 
@@ -55,13 +56,12 @@ pub fn create_instance_buffer(
 
     for (entity, transform) in query.iter() {
         log::info!("create instance buffer for single mesh");
-        let instance_data = vec![transform.to_raw()];
         let instance_buffer =
             renderer
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Instance Buffer"),
-                    contents: bytemuck::cast_slice(&instance_data),
+                    contents: bytemuck::cast_slice(&[transform.to_raw()]),
                     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 });
 
