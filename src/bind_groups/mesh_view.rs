@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use wgpu::util::DeviceExt;
 
-use crate::{camera::Camera, renderer::WgpuRenderer};
+use crate::{camera::Camera, light::Light, renderer::WgpuRenderer};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -25,7 +25,7 @@ impl CameraUniform {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Component)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LightUniform {
     pub position: [f32; 3],
     // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
@@ -46,6 +46,18 @@ impl LightUniform {
     }
 }
 
+impl From<&Light> for LightUniform {
+    fn from(light: &Light) -> Self {
+        LightUniform::new(light.position, light.color)
+    }
+}
+
+impl From<Light> for LightUniform {
+    fn from(light: Light) -> Self {
+        LightUniform::new(light.position, light.color)
+    }
+}
+
 pub struct CameraBuffer(pub wgpu::Buffer);
 
 pub struct LightBuffer(pub wgpu::Buffer);
@@ -58,7 +70,7 @@ pub fn setup_mesh_view_bind_group(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
     camera_uniform: Res<CameraUniform>,
-    light: Query<&LightUniform>,
+    light: Query<&Light>,
 ) {
     let mesh_view_layout =
         renderer
@@ -99,11 +111,12 @@ pub fn setup_mesh_view_bind_group(
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+    let light = light.single();
     let light_buffer = renderer
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Light VB"),
-            contents: bytemuck::cast_slice(&[*light.single()]),
+            contents: bytemuck::cast_slice(&[LightUniform::from(light)]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -148,19 +161,14 @@ pub fn update_camera_buffer(
 
 pub fn update_light_buffer(
     renderer: Res<WgpuRenderer>,
-    mut query: Query<&mut LightUniform>,
+    query: Query<&Light>,
     light_buffer: Res<LightBuffer>,
-    time: Res<Time>,
 ) {
-    for mut light in query.iter_mut() {
-        let old_position = light.position;
-        light.position =
-            Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * time.delta_seconds())
-                .mul_vec3(old_position.into())
-                .to_array();
-
-        renderer
-            .queue
-            .write_buffer(&light_buffer.0, 0, bytemuck::cast_slice(&[*light]));
+    for light in query.iter() {
+        renderer.queue.write_buffer(
+            &light_buffer.0,
+            0,
+            bytemuck::cast_slice(&[LightUniform::from(light)]),
+        );
     }
 }

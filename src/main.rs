@@ -10,8 +10,9 @@ use bevy::{
     winit::{WinitPlugin, WinitWindows},
     MinimalPlugins,
 };
-use bind_groups::mesh_view::{CameraUniform, LightUniform};
+use bind_groups::mesh_view::CameraUniform;
 use futures_lite::future;
+use light::Light;
 use winit::dpi::PhysicalSize;
 
 use camera::Camera;
@@ -103,6 +104,7 @@ fn main() {
         .add_system(move_instances)
         .add_system(instances::update_instance_buffer)
         .add_system(instances::create_instance_buffer)
+        .add_system(update_light)
         .add_system(exit_on_esc)
         .run();
 }
@@ -149,7 +151,10 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         materials: vec![],
     };
 
-    let light = LightUniform::new(LIGHT_POSITION, Color::WHITE);
+    let light = Light {
+        position: LIGHT_POSITION,
+        color: Color::WHITE.as_rgba_f32().into(),
+    };
 
     commands.spawn().insert(light).insert(model);
 }
@@ -346,5 +351,14 @@ impl Wave {
 fn exit_on_esc(key_input: Res<Input<KeyCode>>, mut exit_events: EventWriter<AppExit>) {
     if key_input.just_pressed(KeyCode::Escape) {
         exit_events.send_default();
+    }
+}
+
+fn update_light(mut query: Query<&mut Light>, time: Res<Time>) {
+    for mut light in query.iter_mut() {
+        let old_position = light.position;
+        light.position =
+            Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * time.delta_seconds())
+                .mul_vec3(old_position);
     }
 }

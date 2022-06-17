@@ -1,19 +1,21 @@
+use bevy::prelude::{Color, Component, QueryState, With, Without, World};
+use wgpu::CommandEncoder;
+
 use crate::{
     bind_groups::{
         material,
-        mesh_view::{LightUniform, MeshViewBindGroup, MeshViewBindGroupLayout},
+        mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
     },
     depth_pass::DepthPass,
     instances::InstanceBuffer,
     light::draw_light_model,
+    light::Light,
     model::{self, Model, ModelVertex},
     renderer::{RenderPhase, WgpuRenderer},
     texture::Texture,
     transform::TransformRaw,
     Instances, ShowDepthBuffer,
 };
-use bevy::prelude::{Color, Component, QueryState, With, Without, World};
-use wgpu::CommandEncoder;
 
 pub struct DepthTexture(pub Texture);
 
@@ -60,14 +62,14 @@ pub struct OpaquePass {
     pub render_pipeline: wgpu::RenderPipeline,
     pub light_render_pipeline: wgpu::RenderPipeline,
     pub transparent_render_pipeline: wgpu::RenderPipeline,
-    pub light_query: QueryState<&'static Model, With<LightUniform>>,
+    pub light_query: QueryState<&'static Model, With<Light>>,
     pub model_query: QueryState<
         (
             &'static Model,
             &'static InstanceBuffer,
             Option<&'static Instances>,
         ),
-        (Without<LightUniform>, Without<Transparent>),
+        (Without<Light>, Without<Transparent>),
     >,
     pub transparent_model_query: QueryState<
         (
@@ -75,7 +77,7 @@ pub struct OpaquePass {
             &'static InstanceBuffer,
             Option<&'static Instances>,
         ),
-        (Without<LightUniform>, With<Transparent>),
+        (Without<Light>, With<Transparent>),
     >,
 }
 

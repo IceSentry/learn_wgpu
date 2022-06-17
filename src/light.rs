@@ -1,6 +1,17 @@
 use std::ops::Range;
 
+use bevy::{
+    math::Vec3,
+    prelude::{Color, Component},
+};
+
 use crate::model::{Model, ModelMesh};
+
+#[derive(Component)]
+pub struct Light {
+    pub position: Vec3,
+    pub color: Color,
+}
 
 #[allow(unused)]
 fn draw_light_mesh<'a>(
