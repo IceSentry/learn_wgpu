@@ -1,5 +1,5 @@
-use crate::render_phase_3d::RenderPhase3d;
-use bevy::prelude::{Mut, World};
+use crate::{egui_plugin::EguiRenderPhase, render_phase_3d::RenderPhase3d};
+use bevy::prelude::*;
 use wgpu::CommandEncoder;
 use winit::window::Window;
 
@@ -10,7 +10,7 @@ pub trait RenderPhase {
 }
 
 pub struct WgpuRenderer {
-    surface: wgpu::Surface,
+    pub surface: wgpu::Surface,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
@@ -126,7 +126,7 @@ impl WgpuRenderer {
         }
     }
 
-    pub fn render(&self, world: &mut World) -> anyhow::Result<()> {
+    pub fn render(&self, world: &World) -> anyhow::Result<()> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -138,10 +138,13 @@ impl WgpuRenderer {
                 label: Some("Render Encoder"),
             });
 
-        world.resource_scope(|world, mut phase: Mut<RenderPhase3d>| {
-            phase.update(world);
+        let phase = world.resource::<RenderPhase3d>();
+        phase.render(world, &view, &mut encoder);
+
+        let phase = world.get_non_send_resource::<EguiRenderPhase>();
+        if let Some(phase) = phase {
             phase.render(world, &view, &mut encoder);
-        });
+        }
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();

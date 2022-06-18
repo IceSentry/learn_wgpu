@@ -3,6 +3,7 @@ use std::path::Path;
 use bevy::{
     app::AppExit,
     asset::AssetPlugin,
+    ecs::system::Resource,
     input::{Input, InputPlugin},
     math::{const_vec3, vec3, Quat, Vec3},
     prelude::*,
@@ -11,9 +12,13 @@ use bevy::{
     MinimalPlugins,
 };
 use bind_groups::mesh_view::CameraUniform;
+use egui_plugin::{EguiPlugin, EguiRenderPhase};
 use futures_lite::future;
 use light::Light;
-use winit::dpi::PhysicalSize;
+use winit::{
+    dpi::PhysicalSize,
+    event_loop::{EventLoop, EventLoopWindowTarget},
+};
 
 use camera::Camera;
 use depth_pass::DepthPass;
@@ -21,13 +26,14 @@ use instances::Instances;
 use model::Model;
 use obj_loader::{LoadedObj, ObjLoaderPlugin};
 use render_phase_3d::{ClearColor, DepthTexture, RenderPhase3d};
-use renderer::WgpuRenderer;
+use renderer::{RenderPhase, WgpuRenderer};
 use texture::Texture;
 use transform::Transform;
 
 mod bind_groups;
 mod camera;
 mod depth_pass;
+mod egui_plugin;
 mod instances;
 mod light;
 mod mesh;
@@ -78,6 +84,7 @@ fn main() {
         .add_plugin(AssetPlugin)
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(camera::CameraPlugin)
+        .add_plugin(EguiPlugin)
         .add_startup_system_to_stage(StartupStage::PreStartup, init_renderer)
         .add_startup_system(setup)
         .add_startup_system(init_depth_pass)
@@ -93,7 +100,22 @@ fn main() {
             SystemStage::parallel(),
         )
         .add_startup_system_to_stage("init_render_phase", init_render_phase.exclusive_system())
-        .add_system(render.exclusive_system())
+        .add_system_to_stage(
+            CoreStage::PostUpdate,
+            update_render_phase::<RenderPhase3d>
+                .exclusive_system()
+                .before("render"),
+        )
+        .add_system_to_stage(
+            CoreStage::PostUpdate,
+            update_render_phase::<EguiRenderPhase>
+                .exclusive_system()
+                .before("render"),
+        )
+        .add_system_to_stage(
+            CoreStage::PostUpdate,
+            render.exclusive_system().label("render"),
+        )
         .add_system(resize)
         .add_system(update_window_title)
         .add_system(update_show_depth)
@@ -250,11 +272,15 @@ fn handle_instanced_obj_loaded(
     *mesh_spawned = true;
 }
 
-pub fn render(world: &mut World) {
-    world.resource_scope(|world, renderer: Mut<WgpuRenderer>| {
-        if let Err(e) = renderer.render(world) {
-            log::error!("{e:?}")
-        };
+pub fn render(world: &World, renderer: Res<WgpuRenderer>) {
+    if let Err(e) = renderer.render(world) {
+        log::error!("{e:?}")
+    };
+}
+
+fn update_render_phase<T: RenderPhase + Resource>(world: &mut World) {
+    world.resource_scope(|world, mut phase: Mut<T>| {
+        phase.update(world);
     });
 }
 
@@ -267,6 +293,7 @@ fn resize(
     mut depth_texture: ResMut<DepthTexture>,
     mut camera_uniform: ResMut<CameraUniform>,
     mut camera: ResMut<Camera>,
+    mut screen_descriptor: ResMut<egui_wgpu::renderer::ScreenDescriptor>,
 ) {
     for event in events.iter() {
         let window = windows.get(event.id).expect("window not found");
@@ -280,6 +307,8 @@ fn resize(
 
         depth_texture.0 = Texture::create_depth_texture(&renderer.device, &renderer.config);
         depth_pass.resize(&renderer.device, &depth_texture.0);
+
+        screen_descriptor.size_in_pixels = [width as u32, height as u32];
     }
 }
 
