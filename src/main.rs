@@ -3,32 +3,25 @@ use std::path::Path;
 use bevy::{
     app::AppExit,
     asset::AssetPlugin,
-    ecs::system::Resource,
     input::{Input, InputPlugin},
     math::{const_vec3, vec3, Quat, Vec3},
     prelude::*,
-    window::{CursorMoved, WindowDescriptor, WindowPlugin, WindowResized, Windows},
-    winit::{WinitPlugin, WinitWindows},
+    window::{CursorMoved, WindowDescriptor, WindowPlugin, Windows},
+    winit::WinitPlugin,
     MinimalPlugins,
 };
-use bind_groups::mesh_view::CameraUniform;
-use egui_plugin::{EguiPlugin, EguiRenderPhase};
-use futures_lite::future;
-use light::Light;
-use winit::{
-    dpi::PhysicalSize,
-    event_loop::{EventLoop, EventLoopWindowTarget},
-};
+use renderer_plugin::WgpuRendererPlugin;
 
-use camera::Camera;
-use depth_pass::DepthPass;
-use instances::Instances;
-use model::Model;
-use obj_loader::{LoadedObj, ObjLoaderPlugin};
-use render_phase_3d::{ClearColor, DepthTexture, RenderPhase3d};
-use renderer::{RenderPhase, WgpuRenderer};
-use texture::Texture;
-use transform::Transform;
+use crate::{
+    egui_plugin::EguiPlugin,
+    instances::Instances,
+    light::Light,
+    model::Model,
+    obj_loader::{LoadedObj, ObjLoaderPlugin},
+    render_phase_3d::RenderPhase3dDescriptor,
+    renderer::WgpuRenderer,
+    transform::Transform,
+};
 
 mod bind_groups;
 mod camera;
@@ -41,6 +34,7 @@ mod model;
 mod obj_loader;
 mod render_phase_3d;
 mod renderer;
+mod renderer_plugin;
 mod resources;
 mod shapes;
 mod texture;
@@ -61,7 +55,8 @@ const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out MSAA
 // TODO figure out how to draw lines and use it to draw wireframes
-// TODO extract to plugin
+// TODO use LogPlugin
+// TODO setup traces for renderer
 
 fn main() {
     env_logger::builder()
@@ -77,93 +72,30 @@ fn main() {
             // mode: WindowMode::Fullscreen,
             ..default()
         })
+        .insert_resource(RenderPhase3dDescriptor {
+            clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
+            ..default()
+        })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
+        .add_plugin(WgpuRendererPlugin)
         .add_plugin(InputPlugin::default())
         .add_plugin(AssetPlugin)
         .add_plugin(ObjLoaderPlugin)
-        .add_plugin(camera::CameraPlugin)
         .add_plugin(EguiPlugin)
-        .add_startup_system_to_stage(StartupStage::PreStartup, init_renderer)
-        .add_startup_system(setup)
-        .add_startup_system(init_depth_pass)
         .add_startup_system(spawn_light)
         .add_startup_system(load_obj_asset)
-        .add_startup_system_to_stage(
-            StartupStage::PostStartup,
-            bind_groups::mesh_view::setup_mesh_view_bind_group,
-        )
-        .add_startup_stage_after(
-            StartupStage::PostStartup,
-            "init_render_phase",
-            SystemStage::parallel(),
-        )
-        .add_startup_system_to_stage("init_render_phase", init_render_phase.exclusive_system())
-        .add_system_to_stage(
-            CoreStage::PostUpdate,
-            update_render_phase::<RenderPhase3d>
-                .exclusive_system()
-                .before("render"),
-        )
-        .add_system_to_stage(
-            CoreStage::PostUpdate,
-            update_render_phase::<EguiRenderPhase>
-                .exclusive_system()
-                .before("render"),
-        )
-        .add_system_to_stage(
-            CoreStage::PostUpdate,
-            render.exclusive_system().label("render"),
-        )
-        .add_system(resize)
         .add_system(update_window_title)
         .add_system(update_show_depth)
-        .add_system(bind_groups::mesh_view::update_light_buffer)
         .add_system(handle_instanced_obj_loaded)
         .add_system(handle_obj_loaded)
         // .add_system(cursor_moved)
         .add_system(move_instances)
-        .add_system(instances::update_instance_buffer)
-        .add_system(instances::create_instance_buffer)
         .add_system(update_light)
         .add_system(exit_on_esc)
         .add_system(hello)
         .run();
-}
-
-pub struct ShowDepthBuffer(bool);
-
-fn init_renderer(
-    mut commands: Commands,
-    windows: Res<Windows>,
-    winit_windows: NonSendMut<WinitWindows>,
-) {
-    let window_id = windows.get_primary().expect("bevy window not found").id();
-
-    let winit_window = winit_windows
-        .get_window(window_id)
-        .expect("winit window not found");
-
-    let renderer = future::block_on(WgpuRenderer::new(winit_window));
-    commands.insert_resource(renderer);
-}
-
-fn setup(mut commands: Commands) {
-    commands.insert_resource(ShowDepthBuffer(false));
-    commands.insert_resource(ClearColor(Color::rgba(0.1, 0.2, 0.3, 1.0)));
-}
-
-fn init_render_phase(world: &mut World) {
-    let render_phase_3d = RenderPhase3d::from_world(world);
-    world.insert_resource(render_phase_3d);
-}
-
-fn init_depth_pass(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    let depth_texture = Texture::create_depth_texture(&renderer.device, &renderer.config);
-    let depth_pass = DepthPass::new(&renderer, &depth_texture);
-    commands.insert_resource(DepthTexture(depth_texture));
-    commands.insert_resource(depth_pass);
 }
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
@@ -273,55 +205,18 @@ fn handle_instanced_obj_loaded(
     *mesh_spawned = true;
 }
 
-pub fn render(world: &World, renderer: Res<WgpuRenderer>) {
-    if let Err(e) = renderer.render(world) {
-        log::error!("{e:?}")
-    };
-}
-
-fn update_render_phase<T: RenderPhase + Resource>(world: &mut World) {
-    world.resource_scope(|world, mut phase: Mut<T>| {
-        phase.update(world);
-    });
-}
-
-#[allow(clippy::too_many_arguments)]
-fn resize(
-    mut renderer: ResMut<WgpuRenderer>,
-    mut events: EventReader<WindowResized>,
-    windows: Res<Windows>,
-    mut depth_pass: ResMut<DepthPass>,
-    mut depth_texture: ResMut<DepthTexture>,
-    mut camera_uniform: ResMut<CameraUniform>,
-    mut camera: ResMut<Camera>,
-    mut screen_descriptor: ResMut<egui_wgpu::renderer::ScreenDescriptor>,
-) {
-    for event in events.iter() {
-        let window = windows.get(event.id).expect("window not found");
-        let width = window.physical_width();
-        let height = window.physical_height();
-
-        camera.projection.resize(width, height);
-        camera_uniform.update_view_proj(&camera);
-
-        renderer.resize(PhysicalSize { width, height });
-
-        depth_texture.0 = Texture::create_depth_texture(&renderer.device, &renderer.config);
-        depth_pass.resize(&renderer.device, &depth_texture.0);
-
-        screen_descriptor.size_in_pixels = [width as u32, height as u32];
-    }
-}
-
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
     if let Some(window) = windows.get_primary_mut() {
         window.set_title(format!("dt: {}ms", time.delta().as_millis()));
     }
 }
 
-fn update_show_depth(keyboard_input: Res<Input<KeyCode>>, mut draw_depth: ResMut<ShowDepthBuffer>) {
+fn update_show_depth(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut descriptor: ResMut<RenderPhase3dDescriptor>,
+) {
     if keyboard_input.just_pressed(KeyCode::X) {
-        draw_depth.0 = !draw_depth.0;
+        descriptor.show_depth_buffer = !descriptor.show_depth_buffer;
     }
 }
 
@@ -329,13 +224,13 @@ fn update_show_depth(keyboard_input: Res<Input<KeyCode>>, mut draw_depth: ResMut
 fn cursor_moved(
     renderer: Res<WgpuRenderer>,
     mut events: EventReader<CursorMoved>,
-    mut clear_color: ResMut<ClearColor>,
+    mut descriptor: ResMut<RenderPhase3dDescriptor>,
 ) {
     for event in events.iter() {
-        clear_color.0 = Color::rgb(
+        descriptor.clear_color = Color::rgb(
             event.position.x as f32 / renderer.size.width as f32,
             event.position.y as f32 / renderer.size.height as f32,
-            clear_color.0.b(),
+            descriptor.clear_color.b(),
         );
     }
 }

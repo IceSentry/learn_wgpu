@@ -85,6 +85,8 @@ fn begin_frame(
 impl<'w> RenderPhase for EguiRenderPhase<'w> {
     #[allow(clippy::type_complexity)]
     fn update(&mut self, world: &mut World) {
+        // TODO look if WorldQuery could help simplify this a bit
+
         let (
             renderer,
             screen_descriptor,

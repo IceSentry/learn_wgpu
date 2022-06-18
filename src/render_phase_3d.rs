@@ -14,16 +14,17 @@ use crate::{
     renderer::{RenderPhase, WgpuRenderer},
     texture::Texture,
     transform::TransformRaw,
-    Instances, ShowDepthBuffer,
+    Instances,
 };
 
 pub struct DepthTexture(pub Texture);
 
-pub struct ClearColor(pub Color);
+#[derive(Default)]
+pub struct RenderPhase3dDescriptor {
+    pub clear_color: Color,
+    pub show_depth_buffer: bool,
+}
 
-// TODO not sure if I need a concept of RenderPhase I can probably get away
-// with all of this on the renderer as long as I encapsulate render passes
-#[allow(clippy::type_complexity)]
 pub struct RenderPhase3d {
     pub opaque_pass: OpaquePass,
 }
@@ -42,12 +43,14 @@ impl RenderPhase for RenderPhase3d {
     }
 
     fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut CommandEncoder) {
-        // TODO the RenderPhase3d should probably own this
-        let depth_pass = world.resource::<DepthPass>();
-
         self.opaque_pass.render(world, view, encoder);
 
-        if world.resource::<ShowDepthBuffer>().0 {
+        if world
+            .resource::<RenderPhase3dDescriptor>()
+            .show_depth_buffer
+        {
+            // TODO the RenderPhase3d should probably own this
+            let depth_pass = world.resource::<DepthPass>();
             depth_pass.render(view, encoder);
         }
     }
@@ -56,7 +59,6 @@ impl RenderPhase for RenderPhase3d {
 #[derive(Component)]
 pub struct Transparent;
 
-// TODO pass could own a pipeline
 #[allow(clippy::type_complexity)]
 pub struct OpaquePass {
     pub render_pipeline: wgpu::RenderPipeline,
@@ -169,7 +171,7 @@ impl OpaquePass {
     fn render(&self, world: &World, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
         let mesh_view_bind_group = world.resource::<MeshViewBindGroup>();
         let depth_texture = world.resource::<DepthTexture>();
-        let clear_color = world.resource::<ClearColor>();
+        let clear_color = world.resource::<RenderPhase3dDescriptor>().clear_color;
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Opaque Render Pass"),
@@ -178,10 +180,10 @@ impl OpaquePass {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: clear_color.0.r() as f64,
-                        g: clear_color.0.g() as f64,
-                        b: clear_color.0.b() as f64,
-                        a: clear_color.0.a() as f64,
+                        r: clear_color.r() as f64,
+                        g: clear_color.g() as f64,
+                        b: clear_color.b() as f64,
+                        a: clear_color.a() as f64,
                     }),
                     store: true,
                 },
