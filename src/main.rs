@@ -128,6 +128,7 @@ fn main() {
         .add_system(instances::create_instance_buffer)
         .add_system(update_light)
         .add_system(exit_on_esc)
+        .add_system(hello)
         .run();
 }
 
@@ -390,4 +391,24 @@ fn update_light(mut query: Query<&mut Light>, time: Res<Time>) {
             Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * time.delta_seconds())
                 .mul_vec3(old_position);
     }
+}
+
+fn hello(ctx: Res<egui::Context>, mut local: Local<f32>) {
+    egui::Window::new("Hello title")
+        .resizable(true)
+        .collapsible(true)
+        .show(&ctx, |ui| {
+            ui.label("Hello label");
+            if ui.button("test").clicked() {
+                log::info!("click");
+            }
+        });
+    egui::SidePanel::left("left_panel")
+        .resizable(true)
+        .show(&ctx, |ui| {
+            ui.heading("Side panel");
+
+            ui.add(egui::Slider::new(&mut *local, 0.0..=1.0).show_value(true));
+            ui.add(egui::Slider::new(&mut *local, 0.0..=1.0).show_value(false));
+        });
 }
