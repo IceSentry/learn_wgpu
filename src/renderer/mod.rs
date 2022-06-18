@@ -2,7 +2,14 @@ use bevy::prelude::*;
 use wgpu::CommandEncoder;
 use winit::window::Window;
 
-use crate::{egui_plugin::EguiRenderPhase, render_phase_3d::RenderPhase3d};
+use crate::egui_plugin::EguiRenderPhase;
+
+use self::render_phase_3d::RenderPhase3d;
+
+pub mod bind_groups;
+pub mod depth_pass;
+pub mod plugin;
+pub mod render_phase_3d;
 
 // NOTE: Is this trait necessary?
 pub trait RenderPhase {

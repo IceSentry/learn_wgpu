@@ -3,14 +3,17 @@ use futures_lite::future;
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    bind_groups::{self, mesh_view::CameraUniform},
     camera::{Camera, CameraPlugin},
-    depth_pass::DepthPass,
     egui_plugin::EguiRenderPhase,
     instances,
-    render_phase_3d::{DepthTexture, RenderPhase3d},
     renderer::{RenderPhase, WgpuRenderer},
     texture::Texture,
+};
+
+use super::{
+    bind_groups::{self, mesh_view::CameraUniform},
+    depth_pass::DepthPass,
+    render_phase_3d::{DepthTexture, RenderPhase3d},
 };
 
 pub struct WgpuRendererPlugin;
@@ -34,7 +37,6 @@ impl Plugin for WgpuRendererPlugin {
                 StartupStage::PostStartup,
                 bind_groups::mesh_view::setup_mesh_view_bind_group,
             )
-            .add_system(bind_groups::mesh_view::update_light_buffer)
             .add_system_to_stage(
                 CoreStage::PostUpdate,
                 update_render_phase::<RenderPhase3d>
@@ -51,6 +53,8 @@ impl Plugin for WgpuRendererPlugin {
                 CoreStage::PostUpdate,
                 render.exclusive_system().label("render"),
             )
+            .add_system(bind_groups::mesh_view::update_light_buffer)
+            .add_system(bind_groups::mesh_view::update_camera_buffer)
             .add_system(instances::update_instance_buffer)
             .add_system(instances::create_instance_buffer)
             .add_system(resize);

@@ -1,16 +1,16 @@
 use std::path::{Path, PathBuf};
 
-use crate::{
-    bind_groups::material::{self, MaterialUniform},
-    mesh::{Mesh, Vertex},
-    model::{Material, Model, ModelMesh},
-    obj_loader::ObjMaterial,
-    texture::Texture,
-};
 use anyhow::Context;
 use bevy::{
     math::{Vec2, Vec3, Vec4},
     utils::Instant,
+};
+
+use crate::{
+    mesh::{Mesh, Vertex},
+    model::{Material, Model, ModelMesh},
+    obj_loader::ObjMaterial,
+    texture::Texture,
 };
 
 pub fn load_bytes(file_name: &PathBuf) -> anyhow::Result<Vec<u8>> {
@@ -52,9 +52,9 @@ pub fn load_model(
     for m in obj_materials {
         let diffuse_texture =
             Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name))?;
-        let bind_group = material::create_bind_group(
+        let bind_group = crate::renderer::bind_groups::material::create_bind_group(
             device,
-            &MaterialUniform {
+            &crate::renderer::bind_groups::material::MaterialUniform {
                 base_color: m.diffuse_color,
                 alpha: 1.0,
             },
@@ -73,9 +73,9 @@ pub fn load_model(
         path.push("pink.png");
 
         let diffuse_texture = load_texture(&path, device, queue)?;
-        let bind_group = material::create_bind_group(
+        let bind_group = crate::renderer::bind_groups::material::create_bind_group(
             device,
-            &MaterialUniform {
+            &crate::renderer::bind_groups::material::MaterialUniform {
                 base_color: Vec4::new(1.0, 0.0, 0.0, 1.0),
                 alpha: 1.0,
             },

@@ -10,7 +10,6 @@ use bevy::{
     winit::WinitPlugin,
     MinimalPlugins,
 };
-use renderer_plugin::WgpuRendererPlugin;
 
 use crate::{
     egui_plugin::EguiPlugin,
@@ -18,23 +17,20 @@ use crate::{
     light::Light,
     model::Model,
     obj_loader::{LoadedObj, ObjLoaderPlugin},
-    render_phase_3d::RenderPhase3dDescriptor,
+    renderer::plugin::WgpuRendererPlugin,
+    renderer::render_phase_3d::RenderPhase3dDescriptor,
     renderer::WgpuRenderer,
     transform::Transform,
 };
 
-mod bind_groups;
 mod camera;
-mod depth_pass;
 mod egui_plugin;
 mod instances;
 mod light;
 mod mesh;
 mod model;
 mod obj_loader;
-mod render_phase_3d;
 mod renderer;
-mod renderer_plugin;
 mod resources;
 mod shapes;
 mod texture;

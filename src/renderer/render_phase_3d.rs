@@ -2,19 +2,22 @@ use bevy::prelude::{Color, Component, QueryState, With, Without, World};
 use wgpu::CommandEncoder;
 
 use crate::{
+    instances::InstanceBuffer,
+    light::draw_light_model,
+    light::Light,
+    model::{self, Model, ModelVertex},
+    texture::Texture,
+    transform::TransformRaw,
+    Instances,
+};
+
+use super::{
     bind_groups::{
         material,
         mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
     },
     depth_pass::DepthPass,
-    instances::InstanceBuffer,
-    light::draw_light_model,
-    light::Light,
-    model::{self, Model, ModelVertex},
-    renderer::{RenderPhase, WgpuRenderer},
-    texture::Texture,
-    transform::TransformRaw,
-    Instances,
+    RenderPhase, WgpuRenderer,
 };
 
 pub struct DepthTexture(pub Texture);

@@ -1,6 +1,6 @@
 use bevy::{input::mouse::MouseMotion, math::const_vec3, prelude::*};
 
-use crate::bind_groups::mesh_view::{update_camera_buffer, CameraUniform};
+use crate::renderer::bind_groups::mesh_view::CameraUniform;
 
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 const MAX_SPEED: f32 = 15.0;
@@ -10,8 +10,7 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system_to_stage(StartupStage::PreStartup, setup_camera)
-            .add_system(fly_camera)
-            .add_system(update_camera_buffer);
+            .add_system(fly_camera);
     }
 }
 
