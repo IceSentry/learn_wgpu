@@ -1,8 +1,4 @@
-use bevy::{
-    input::mouse::MouseMotion,
-    math::{const_vec3, vec3},
-    prelude::*,
-};
+use bevy::{input::mouse::MouseMotion, math::const_vec3, prelude::*};
 
 use crate::{
     bind_groups::mesh_view::{update_camera_buffer, CameraUniform},
@@ -22,34 +18,49 @@ impl Plugin for CameraPlugin {
     }
 }
 
-pub struct Camera {
-    pub eye: Vec3,
-    pub target: Vec3,
-    pub up: Vec3,
+pub struct Projection {
     pub aspect: f32,
     pub fov_y: f32,
     pub z_near: f32,
     pub z_far: f32,
+}
+
+impl Projection {
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.aspect = width as f32 / height as f32;
+    }
+
+    pub fn compute_matrix(&self) -> Mat4 {
+        Mat4::perspective_rh(self.fov_y, self.aspect, self.z_near, self.z_far)
+    }
+}
+
+pub struct Camera {
+    pub eye: Vec3,
+    pub target: Vec3,
     pub rotation: Quat,
+    pub projection: Projection,
 }
 
 impl Camera {
     pub fn new(width: f32, height: f32) -> Self {
         Self {
             eye: CAMERRA_EYE,
-            target: vec3(0.0, 0.0, 0.0),
-            up: Vec3::Y,
-            aspect: width / height,
-            fov_y: 45.0,
-            z_near: 0.1,
-            z_far: 1000.0,
-            rotation: Quat::default(),
+            target: Vec3::ZERO,
+            projection: Projection {
+                aspect: width / height,
+                fov_y: 45.0,
+                z_near: 0.1,
+                z_far: 1000.0,
+            },
+            rotation: Quat::from_mat4(&Mat4::look_at_rh(CAMERRA_EYE, Vec3::ZERO, Vec3::Y))
+                .inverse(),
         }
     }
 
     pub fn build_view_projection_matrix(&self) -> Mat4 {
         let view = Mat4::from_rotation_translation(self.rotation, self.eye);
-        let proj = Mat4::perspective_rh(self.fov_y, self.aspect, self.z_near, self.z_far);
+        let proj = self.projection.compute_matrix();
         proj * view.inverse()
     }
 
@@ -61,6 +72,11 @@ impl Camera {
     #[inline]
     pub fn right(&self) -> Vec3 {
         self.local_x()
+    }
+    #[allow(unused)]
+    #[inline]
+    pub fn up(&self) -> Vec3 {
+        self.local_y()
     }
 
     #[inline]

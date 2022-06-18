@@ -15,18 +15,17 @@ pub struct Transform {
 pub struct TransformRaw {
     model: [[f32; 4]; 4],
     normal: [[f32; 3]; 3],
+    inverse_transpose_model: [[f32; 4]; 4],
 }
 
 impl Transform {
     pub fn to_raw(&self) -> TransformRaw {
+        let model =
+            Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation);
         TransformRaw {
-            model: Mat4::from_scale_rotation_translation(
-                self.scale,
-                self.rotation,
-                self.translation,
-            )
-            .to_cols_array_2d(),
+            model: model.to_cols_array_2d(),
             normal: Mat3::from_quat(self.rotation).to_cols_array_2d(),
+            inverse_transpose_model: model.inverse().transpose().to_cols_array_2d(),
         }
     }
 }
@@ -79,6 +78,27 @@ impl TransformRaw {
                     offset: std::mem::size_of::<[f32; 22]>() as wgpu::BufferAddress,
                     shader_location: 11,
                     format: wgpu::VertexFormat::Float32x3,
+                },
+                // inverse_transpose_model
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 25]>() as wgpu::BufferAddress,
+                    shader_location: 12,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 34]>() as wgpu::BufferAddress,
+                    shader_location: 13,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 38]>() as wgpu::BufferAddress,
+                    shader_location: 14,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 42]>() as wgpu::BufferAddress,
+                    shader_location: 15,
+                    format: wgpu::VertexFormat::Float32x4,
                 },
             ],
         }

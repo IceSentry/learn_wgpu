@@ -4,7 +4,6 @@ use wgpu::util::DeviceExt;
 use crate::renderer::WgpuRenderer;
 use crate::{model::Model, transform::Transform};
 
-// TODO store uniform buffer instead
 #[derive(Component)]
 pub struct InstanceBuffer(pub wgpu::Buffer);
 

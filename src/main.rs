@@ -144,7 +144,7 @@ fn init_depth_pass(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 }
 
 fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
-    let cube = shapes::Cube::new(1.0, 1.0, 1.0);
+    let cube = shapes::cube::Cube::new(1.0, 1.0, 1.0);
     let mesh = cube.mesh(&renderer.device);
     let model = Model {
         meshes: vec![mesh],
@@ -273,7 +273,7 @@ fn resize(
         let width = window.physical_width();
         let height = window.physical_height();
 
-        camera.aspect = width as f32 / height as f32;
+        camera.projection.resize(width, height);
         camera_uniform.update_view_proj(&camera);
 
         renderer.resize(PhysicalSize { width, height });

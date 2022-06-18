@@ -88,7 +88,7 @@ impl Cube {
         });
 
         ModelMesh {
-            name: "".to_string(),
+            name: "cube".to_string(),
             vertex_buffer,
             index_buffer,
             num_elements: indices.len() as u32,

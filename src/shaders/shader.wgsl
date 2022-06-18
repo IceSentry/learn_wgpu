@@ -29,29 +29,32 @@ struct Vertex {
     [[location(2)]] uv: vec2<f32>;
 };
 struct InstanceInput {
-    [[location(5)]] transform_matrix_0: vec4<f32>;
-    [[location(6)]] transform_matrix_1: vec4<f32>;
-    [[location(7)]] transform_matrix_2: vec4<f32>;
-    [[location(8)]] transform_matrix_3: vec4<f32>;
+    [[location(5)]] model_matrix_0: vec4<f32>;
+    [[location(6)]] model_matrix_1: vec4<f32>;
+    [[location(7)]] model_matrix_2: vec4<f32>;
+    [[location(8)]] model_matrix_3: vec4<f32>;
     [[location(9)]] normal_matrix_0: vec3<f32>;
     [[location(10)]] normal_matrix_1: vec3<f32>;
     [[location(11)]] normal_matrix_2: vec3<f32>;
+    [[location(12)]] inverse_transpose_model_matrix_0: vec4<f32>;
+    [[location(13)]] inverse_transpose_model_matrix_1: vec4<f32>;
+    [[location(14)]] inverse_transpose_model_matrix_2: vec4<f32>;
+    [[location(15)]] inverse_transpose_model_matrix_3: vec4<f32>;
 };
 
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(0)]] world_position: vec3<f32>;
+    [[location(0)]] world_position: vec4<f32>;
     [[location(1)]] world_normal: vec3<f32>;
     [[location(2)]] uv: vec2<f32>;
-    // [[location(3)]] color: vec4<f32>;
 };
 
 fn build_model_matrix(instance: InstanceInput) -> mat4x4<f32> {
     return mat4x4<f32>(
-        instance.transform_matrix_0,
-        instance.transform_matrix_1,
-        instance.transform_matrix_2,
-        instance.transform_matrix_3,
+        instance.model_matrix_0,
+        instance.model_matrix_1,
+        instance.model_matrix_2,
+        instance.model_matrix_3,
     );
 }
 
@@ -63,6 +66,23 @@ fn build_normal_matrix(instance: InstanceInput) -> mat3x3<f32> {
     );
 }
 
+fn build_inverse_transpose_model_matrix(instance: InstanceInput) -> mat4x4<f32> {
+    return mat4x4<f32>(
+        instance.inverse_transpose_model_matrix_0,
+        instance.inverse_transpose_model_matrix_1,
+        instance.inverse_transpose_model_matrix_2,
+        instance.inverse_transpose_model_matrix_3,
+    );
+}
+
+fn mesh_normal_local_to_world(inverse_transpose_model_matrix: mat4x4<f32>, vertex_normal: vec3<f32>) -> vec3<f32> {
+    return mat3x3<f32>(
+        inverse_transpose_model_matrix[0].xyz,
+        inverse_transpose_model_matrix[1].xyz,
+        inverse_transpose_model_matrix[2].xyz
+    ) * vertex_normal;
+}
+
 [[stage(vertex)]]
 fn vertex(
     vertex: Vertex,
@@ -70,14 +90,16 @@ fn vertex(
 ) -> VertexOutput {
     let model_matrix = build_model_matrix(instance);
     let normal_matrix = build_normal_matrix(instance);
+    let inverse_transpose_model_matrix = build_inverse_transpose_model_matrix(instance);
+
+    let mv_matrix = model_matrix * camera.view_proj;
 
     var out: VertexOutput;
     out.uv = vertex.uv;
     out.world_normal = normal_matrix * vertex.normal;
 
-    var world_position: vec4<f32> = model_matrix * vec4<f32>(vertex.position, 1.0);
-    out.world_position = world_position.xyz;
-    out.clip_position = camera.view_proj * world_position;
+    out.world_position = model_matrix * vec4<f32>(vertex.position, 1.0);
+    out.clip_position = camera.view_proj * out.world_position;
     return out;
 }
 
@@ -89,15 +111,19 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let ambient_strength = 0.05;
     let ambient_color = light.color * ambient_strength;
 
-    let light_dir = normalize(light.position - in.world_position);
+    // let light_pos = camera.view_proj * in.model_matrix * light.position;
+    let light_pos = light.position;
+    let light_dir = normalize(light_pos - in.world_position.xyz);
 
     let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
     let diffuse_color = light.color * diffuse_strength;
 
-    let view_dir = normalize(camera.view_pos.xyz - in.world_position);
+    let view_dir = normalize(camera.view_pos.xyz - in.world_position.xyz);
     let half_dir = normalize(view_dir + light_dir);
 
-    let specular_strength = pow(max(dot(in.world_normal, half_dir), 0.0), 32.0);
+    var specular_strength = max(dot(in.world_normal, half_dir), 0.0);
+    let gloss = 32.0;
+    specular_strength = pow(specular_strength, gloss);
     let specular_color = specular_strength * light.color;
 
     let result = (ambient_color + diffuse_color + specular_color) * color.rgb * material.base_color.rgb;
