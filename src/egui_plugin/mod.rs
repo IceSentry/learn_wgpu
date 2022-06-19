@@ -151,7 +151,11 @@ fn handle_mouse_events(
                 modifiers: ModifiersState::empty(),
                 position: winit::dpi::PhysicalPosition {
                     x: ev.position.x as f64,
-                    y: (windows.primary().physical_height() - ev.position.y as u32) as f64,
+                    y: if ev.position.y as u32 > windows.primary().physical_height() {
+                        0.0
+                    } else {
+                        (windows.primary().physical_height() - ev.position.y as u32) as f64
+                    },
                 },
             },
         );

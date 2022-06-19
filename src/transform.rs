@@ -10,6 +10,16 @@ pub struct Transform {
     pub scale: Vec3,
 }
 
+impl Default for Transform {
+    fn default() -> Self {
+        Self {
+            rotation: Quat::default(),
+            translation: Vec3::ZERO,
+            scale: Vec3::ONE,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct TransformRaw {

@@ -1,5 +1,11 @@
-use crate::texture::Texture;
-use bevy::prelude::Component;
+use crate::{
+    renderer::{
+        bind_groups::{self, material::MaterialUniform},
+        WgpuRenderer,
+    },
+    texture::Texture,
+};
+use bevy::{math::Vec4, prelude::Component};
 use std::ops::Range;
 
 #[repr(C)]
@@ -91,6 +97,28 @@ pub struct Material {
     pub alpha: f32,
     // pub normal_texture: Texture,
     pub bind_group: wgpu::BindGroup,
+}
+
+impl Material {
+    pub fn new(
+        renderer: &WgpuRenderer,
+        name: &str,
+        texture: Texture,
+        base_color: Vec4,
+        alpha: f32,
+    ) -> Self {
+        let bind_group = bind_groups::material::create_bind_group(
+            &renderer.device,
+            &MaterialUniform { base_color, alpha },
+            &texture,
+        );
+        Self {
+            name: name.to_string(),
+            diffuse_texture: texture,
+            alpha: 1.0,
+            bind_group,
+        }
+    }
 }
 
 #[derive(Debug)]

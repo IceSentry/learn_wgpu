@@ -10,6 +10,7 @@ use bevy::{
     winit::WinitPlugin,
     MinimalPlugins,
 };
+use texture::Texture;
 
 use crate::{
     egui_plugin::EguiPlugin,
@@ -54,6 +55,12 @@ const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 // TODO use LogPlugin
 // TODO setup traces for renderer
 
+struct LightSettings {
+    rotate: bool,
+    color: Color,
+    speed: f32,
+}
+
 fn main() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
@@ -72,6 +79,11 @@ fn main() {
             clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
             ..default()
         })
+        .insert_resource(LightSettings {
+            rotate: true,
+            color: Color::WHITE,
+            speed: 0.5,
+        })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
@@ -81,7 +93,8 @@ fn main() {
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(EguiPlugin)
         .add_startup_system(spawn_light)
-        .add_startup_system(load_obj_asset)
+        .add_startup_system(spawn_shapes)
+        // .add_startup_system(load_obj_asset)
         .add_system(update_window_title)
         .add_system(update_show_depth)
         .add_system(handle_instanced_obj_loaded)
@@ -90,7 +103,7 @@ fn main() {
         .add_system(move_instances)
         .add_system(update_light)
         .add_system(exit_on_esc)
-        .add_system(hello)
+        .add_system(settings_ui)
         .run();
 }
 
@@ -108,6 +121,77 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     };
 
     commands.spawn().insert(light).insert(model);
+}
+
+fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
+    let plane = Model {
+        meshes: vec![shapes::plane::Plane {
+            resolution: 1,
+            size: 5.0,
+        }
+        .mesh(&renderer.device)],
+        materials: vec![get_default_material(&renderer, Color::GREEN)],
+    };
+    commands.spawn_bundle((
+        plane,
+        Transform {
+            translation: Vec3::new(-2.5, -1.0, -2.5),
+            ..default()
+        },
+    ));
+
+    let cube = Model {
+        meshes: vec![shapes::cube::Cube::new(1.0, 1.0, 1.0).mesh(&renderer.device)],
+        materials: vec![get_default_material(&renderer, Color::WHITE)],
+    };
+    commands.spawn_bundle((
+        cube,
+        Transform {
+            translation: Vec3::ZERO - (Vec3::X * 1.5),
+            ..default()
+        },
+    ));
+
+    let sphere = Model {
+        meshes: vec![shapes::sphere::UVSphere::default().mesh(&renderer.device)],
+        materials: vec![get_default_material(&renderer, Color::WHITE)],
+    };
+    commands.spawn_bundle((
+        sphere,
+        Transform {
+            translation: Vec3::ZERO,
+            ..default()
+        },
+    ));
+
+    let capsule = Model {
+        meshes: vec![shapes::capsule::Capsule::default().mesh(&renderer.device)],
+        materials: vec![get_default_material(&renderer, Color::WHITE)],
+    };
+    commands.spawn_bundle((
+        capsule,
+        Transform {
+            translation: Vec3::ZERO + (Vec3::X * 1.5),
+            ..default()
+        },
+    ));
+}
+
+fn get_default_material(renderer: &WgpuRenderer, base_color: Color) -> model::Material {
+    let default_texture = Texture::from_bytes(
+        &renderer.device,
+        &renderer.queue,
+        &std::fs::read("assets/white.png").expect("failed to load white.png"),
+        "default_texture",
+    )
+    .expect("Failed to load texture");
+    model::Material::new(
+        renderer,
+        "default_material",
+        default_texture,
+        base_color.as_rgba_f32().into(),
+        1.0,
+    )
 }
 
 fn load_obj_asset(asset_server: Res<AssetServer>) {
@@ -139,11 +223,13 @@ fn handle_obj_loaded(
     )
     .expect("failed to load model from obj");
 
-    commands.spawn().insert(model).insert(Transform {
-        rotation: Quat::default(),
-        translation: Vec3::ZERO,
-        scale: SCALE,
-    });
+    commands.spawn_bundle((
+        model,
+        Transform {
+            scale: SCALE,
+            ..default()
+        },
+    ));
     *mesh_spawned = true;
 }
 
@@ -275,31 +361,28 @@ fn exit_on_esc(key_input: Res<Input<KeyCode>>, mut exit_events: EventWriter<AppE
     }
 }
 
-fn update_light(mut query: Query<&mut Light>, time: Res<Time>) {
+fn update_light(mut query: Query<&mut Light>, time: Res<Time>, settings: Res<LightSettings>) {
+    if !settings.rotate {
+        return;
+    }
     for mut light in query.iter_mut() {
         let old_position = light.position;
-        light.position =
-            Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * time.delta_seconds())
-                .mul_vec3(old_position);
+        light.position = Quat::from_axis_angle(
+            Vec3::Y,
+            std::f32::consts::TAU * time.delta_seconds() * settings.speed,
+        )
+        .mul_vec3(old_position);
     }
 }
 
-fn hello(ctx: Res<egui::Context>, mut local: Local<f32>) {
-    egui::Window::new("Hello title")
+fn settings_ui(ctx: Res<egui::Context>, mut light_settings: ResMut<LightSettings>) {
+    egui::Window::new("Settings")
         .resizable(true)
         .collapsible(true)
         .show(&ctx, |ui| {
-            ui.label("Hello label");
-            if ui.button("test").clicked() {
-                log::info!("click");
-            }
-        });
-    egui::SidePanel::left("left_panel")
-        .resizable(true)
-        .show(&ctx, |ui| {
-            ui.heading("Side panel");
-
-            ui.add(egui::Slider::new(&mut *local, 0.0..=1.0).show_value(true));
-            ui.add(egui::Slider::new(&mut *local, 0.0..=1.0).show_value(false));
+            ui.heading("Light Settings");
+            ui.checkbox(&mut light_settings.rotate, "Rotate");
+            ui.label("Speed");
+            ui.add(egui::Slider::new(&mut light_settings.speed, 0.0..=2.0).step_by(0.05));
         });
 }
