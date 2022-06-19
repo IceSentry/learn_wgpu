@@ -32,6 +32,7 @@ impl Default for Capsule {
     }
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Copy)]
 /// Manner in which UV coordinates are distributed vertically.
 pub enum CapsuleUvProfile {
