@@ -16,16 +16,7 @@ impl Texture {
         bytes: &[u8],
         label: &str,
     ) -> anyhow::Result<Self> {
-        let start = Instant::now();
-        log::info!("start image::load_from_memory {label}");
-
         let img = image::load_from_memory(bytes)?;
-
-        log::info!(
-            "end image::load_from_memory {label} {}ms",
-            (Instant::now() - start).as_millis()
-        );
-
         Self::from_image(device, queue, &img.to_rgba8(), Some(label))
     }
 
