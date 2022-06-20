@@ -94,7 +94,7 @@ fn main() {
         .add_plugin(EguiPlugin)
         .add_startup_system(spawn_light)
         .add_startup_system(spawn_shapes)
-        // .add_startup_system(load_obj_asset)
+        .add_startup_system(load_obj_asset)
         .add_system(update_window_title)
         .add_system(update_show_depth)
         .add_system(handle_instanced_obj_loaded)

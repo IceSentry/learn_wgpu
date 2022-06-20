@@ -1,4 +1,4 @@
-use bevy::prelude::{Added, Changed, Commands, Component, Entity, Query, Res, With, Without};
+use bevy::prelude::{Added, Changed, Commands, Component, Entity, Or, Query, Res, With, Without};
 use wgpu::util::DeviceExt;
 
 use crate::renderer::WgpuRenderer;
@@ -18,27 +18,24 @@ pub struct Instances(pub Vec<Transform>);
 pub fn create_instance_buffer(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
-    instanced_query: Query<
-        (Entity, &Instances),
-        (
-            Added<Instances>,
-            With<Model>,
-            Without<Transform>,
-            Without<InstanceBuffer>,
-        ),
-    >,
     query: Query<
-        (Entity, &Transform),
+        (Entity, Option<&Transform>, Option<&Instances>),
         (
-            Added<Transform>,
+            Or<(Added<Transform>, Added<Instances>)>,
             With<Model>,
-            Without<Instances>,
             Without<InstanceBuffer>,
         ),
     >,
 ) {
-    for (entity, instances) in instanced_query.iter() {
-        let instance_data: Vec<_> = instances.0.iter().map(Transform::to_raw).collect();
+    for (entity, transform, instances) in query.iter() {
+        let instance_data = if let Some(transform) = transform {
+            vec![transform.to_raw()]
+        } else if let Some(instances) = instances {
+            instances.0.iter().map(Transform::to_raw).collect()
+        } else {
+            unreachable!();
+        };
+
         let instance_buffer =
             renderer
                 .device
@@ -52,30 +49,25 @@ pub fn create_instance_buffer(
             .entity(entity)
             .insert(InstanceBuffer(instance_buffer));
     }
-
-    for (entity, transform) in query.iter() {
-        log::info!("create instance buffer for single mesh");
-        let instance_buffer =
-            renderer
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Instance Buffer"),
-                    contents: bytemuck::cast_slice(&[transform.to_raw()]),
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                });
-
-        commands
-            .entity(entity)
-            .insert(InstanceBuffer(instance_buffer));
-    }
 }
 
+#[allow(clippy::type_complexity)]
 pub fn update_instance_buffer(
     renderer: Res<WgpuRenderer>,
-    query: Query<(&InstanceBuffer, &Instances), Changed<Instances>>,
+    query: Query<
+        (&InstanceBuffer, Option<&Transform>, Option<&Instances>),
+        Or<(Changed<Transform>, Changed<Instances>)>,
+    >,
 ) {
-    for (buffer, instances) in query.iter() {
-        let data: Vec<_> = instances.0.iter().map(Transform::to_raw).collect();
+    for (buffer, transform, instances) in query.iter() {
+        let data: Vec<_> = if let Some(t) = transform {
+            vec![Transform::to_raw(t)]
+        } else if let Some(instances) = instances {
+            instances.0.iter().map(Transform::to_raw).collect()
+        } else {
+            unreachable!();
+        };
+
         renderer
             .queue
             .write_buffer(&buffer.0, 0, bytemuck::cast_slice(&data[..]));
