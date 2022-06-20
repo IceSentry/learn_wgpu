@@ -56,7 +56,8 @@ pub fn load_model(
             name: m.name.clone(),
             diffuse_texture,
             alpha: m.alpha,
-            gloss: m.gloss,
+            // obj values are in the range 0-1000, but I need them to be 0-1
+            gloss: m.gloss / 1000.0,
             base_color: m.diffuse_color,
         });
     }
