@@ -112,7 +112,7 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let light_dir = normalize(light_pos - in.world_position.xyz);
 
     // TODO load ambient values from uniform buffer
-    let ambient_strength = 0.025;
+    let ambient_strength = 0.05;
     let ambient_color = light.color * ambient_strength;
 
     // let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);

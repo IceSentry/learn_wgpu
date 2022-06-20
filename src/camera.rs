@@ -1,9 +1,8 @@
 use bevy::{input::mouse::MouseMotion, math::const_vec3, prelude::*};
 
-use crate::renderer::bind_groups::mesh_view::CameraUniform;
+use crate::{renderer::bind_groups::mesh_view::CameraUniform, CameraSettings};
 
-const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
-const MAX_SPEED: f32 = 15.0;
+const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 2.0, 4.0]);
 const FRICTION: f32 = 0.5;
 
 pub struct CameraPlugin;
@@ -111,6 +110,7 @@ fn fly_camera(
     mut camera: ResMut<Camera>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut velocity: Local<Vec3>,
+    settings: Res<CameraSettings>,
 ) {
     if !mouse_input.pressed(MouseButton::Right) {
         return;
@@ -162,7 +162,7 @@ fn fly_camera(
     }
 
     if axis_input != Vec3::ZERO {
-        *velocity = axis_input.normalize() * MAX_SPEED;
+        *velocity = axis_input.normalize() * settings.speed;
     } else {
         *velocity *= 1.0 - FRICTION;
         if velocity.length_squared() < 1e-6 {

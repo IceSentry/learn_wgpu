@@ -39,7 +39,7 @@ mod transform;
 
 const NUM_INSTANCES_PER_ROW: u32 = 6;
 const SPACE_BETWEEN: f32 = 3.0;
-const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
+const LIGHT_POSITION: Vec3 = const_vec3!([4.5, 2.0, 0.0]);
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
 const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
@@ -55,10 +55,18 @@ const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 // TODO use LogPlugin
 // TODO setup traces for renderer
 
+struct CameraSettings {
+    speed: f32,
+}
+
 struct LightSettings {
     rotate: bool,
     color: [f32; 3],
     speed: f32,
+}
+
+struct GlobalMaterialSettings {
+    gloss: f32,
 }
 
 fn main() {
@@ -79,11 +87,13 @@ fn main() {
             clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
             ..default()
         })
+        .insert_resource(CameraSettings { speed: 2.0 })
         .insert_resource(LightSettings {
             rotate: true,
             color: [1.0, 1.0, 1.0],
             speed: 0.25,
         })
+        .insert_resource(GlobalMaterialSettings { gloss: 32.0 })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
@@ -104,6 +114,7 @@ fn main() {
         .add_system(update_light)
         .add_system(exit_on_esc)
         .add_system(settings_ui)
+        .add_system(update_materials)
         .run();
 }
 
@@ -375,16 +386,53 @@ fn update_light(mut query: Query<&mut Light>, time: Res<Time>, settings: Res<Lig
     }
 }
 
-fn settings_ui(ctx: Res<egui::Context>, mut light_settings: ResMut<LightSettings>) {
+fn update_materials(mut query: Query<&mut Model>, settings: Res<GlobalMaterialSettings>) {
+    if !settings.is_changed() {
+        return;
+    }
+
+    for mut model in query.iter_mut() {
+        for mut material in model.materials.iter_mut() {
+            material.gloss = settings.gloss;
+        }
+    }
+}
+
+fn settings_ui(
+    ctx: Res<egui::Context>,
+    mut camera_settings: ResMut<CameraSettings>,
+    mut light_settings: ResMut<LightSettings>,
+    mut global_material_settings: ResMut<GlobalMaterialSettings>,
+) {
     egui::Window::new("Settings")
         .resizable(true)
         .collapsible(true)
         .show(&ctx, |ui| {
-            ui.heading("Light Settings");
+            ui.heading("Camera");
+
+            ui.label("Speed");
+            ui.add(egui::Slider::new(&mut camera_settings.speed, 1.0..=20.0).step_by(0.5));
+
+            ui.separator();
+
+            ui.heading("Light");
+
             ui.checkbox(&mut light_settings.rotate, "Rotate");
             ui.label("Speed");
             ui.add(egui::Slider::new(&mut light_settings.speed, 0.0..=2.0).step_by(0.05));
             ui.label("Color");
             ui.color_edit_button_rgb(&mut light_settings.color);
+
+            ui.separator();
+
+            ui.heading("Global Material");
+
+            ui.label("Gloss");
+            ui.add(
+                egui::Slider::new(&mut global_material_settings.gloss, 0.0..=1000.0)
+                    .smallest_positive(1.0)
+                    .logarithmic(true)
+                    .largest_finite(1000.0),
+            );
         });
 }
