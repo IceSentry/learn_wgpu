@@ -57,7 +57,7 @@ const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 struct LightSettings {
     rotate: bool,
-    color: Color,
+    color: [f32; 3],
     speed: f32,
 }
 
@@ -81,8 +81,8 @@ fn main() {
         })
         .insert_resource(LightSettings {
             rotate: true,
-            color: Color::WHITE,
-            speed: 0.5,
+            color: [1.0, 1.0, 1.0],
+            speed: 0.25,
         })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
@@ -372,6 +372,7 @@ fn update_light(mut query: Query<&mut Light>, time: Res<Time>, settings: Res<Lig
             std::f32::consts::TAU * time.delta_seconds() * settings.speed,
         )
         .mul_vec3(old_position);
+        light.color = settings.color.into();
     }
 }
 
@@ -384,5 +385,7 @@ fn settings_ui(ctx: Res<egui::Context>, mut light_settings: ResMut<LightSettings
             ui.checkbox(&mut light_settings.rotate, "Rotate");
             ui.label("Speed");
             ui.add(egui::Slider::new(&mut light_settings.speed, 0.0..=2.0).step_by(0.05));
+            ui.label("Color");
+            ui.color_edit_button_rgb(&mut light_settings.color);
         });
 }
