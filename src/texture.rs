@@ -1,5 +1,3 @@
-use bevy::utils::Instant;
-
 #[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,

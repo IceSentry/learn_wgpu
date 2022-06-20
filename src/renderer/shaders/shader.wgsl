@@ -112,24 +112,33 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let light_pos = light.position;
     let L = normalize(light_pos - in.world_position.xyz);
 
-    // TODO load ambient values from uniform buffer
-    let ambient_strength = 0.05;
-    let ambient_color = light.color * ambient_strength;
-
-    // let diffuse_strength = max(dot(N, L), 0.0);
-    let diffuse_strength = clamp(dot(N, L), 0.0, 1.0);
+    let diffuse_strength = max(dot(N, L), 0.0);
     let diffuse_color = diffuse_strength * light.color;
 
-    let view_dir = normalize(camera.view_pos.xyz - in.world_position.xyz);
-    let half_dir = normalize(L + view_dir);
+    let V = normalize(camera.view_pos.xyz - in.world_position.xyz);
+    let H = normalize(L + V);
 
-    var specular_strength = clamp(dot(N, half_dir), 0.0, 1.0) * f32(diffuse_strength > 0.0);
-    specular_strength = pow(specular_strength, material.gloss) * material.gloss;
+    var specular_strength = max(dot(N, H), 0.0);
+
+    // Make sure the specular light doesn't go pass the lambertian diffuse light
+    // this fixes a small artifact, but introduces very sharp cutoff
+    specular_strength = specular_strength * f32(diffuse_strength > 0.0);
+
+    let specular_exp = exp2(material.gloss * 11.0) + 2.0;
+    specular_strength = pow(specular_strength, specular_exp);
+    specular_strength = specular_strength * material.gloss;
+
     let specular_color = specular_strength * light.color;
 
-    // let result = (ambient_color + diffuse_color + specular_color) * color.rgb * material.base_color.rgb;
-    let result = specular_color;
+    // TODO load ambient values from uniform buffer
+    let ambient_strength = 0.05;
+    let ambient_color = ambient_strength * light.color;
+
+    let result = (ambient_color + diffuse_color + specular_color) * color.rgb * material.base_color.rgb;
+    // let result = diffuse_color;
+    // let result = specular_color;
     // let result = material.base_color.rgb;
+    // let result = N;
 
     return vec4<f32>(result, color.a);
 }

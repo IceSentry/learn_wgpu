@@ -428,11 +428,9 @@ fn settings_ui(
             ui.heading("Global Material");
 
             ui.label("Gloss");
-            ui.add(
-                egui::Slider::new(&mut global_material_settings.gloss, 0.0..=1000.0)
-                    .smallest_positive(1.0)
-                    .logarithmic(true)
-                    .largest_finite(1000.0),
-            );
+            ui.add(egui::Slider::new(
+                &mut global_material_settings.gloss,
+                0.0..=1.0,
+            ));
         });
 }
