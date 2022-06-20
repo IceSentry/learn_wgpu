@@ -30,7 +30,7 @@ impl Plane {
                         0.0,
                         y as f32 * resolution_modifier,
                     ],
-                    [0.0, 0.0, 1.0],
+                    [0.0, 1.0, 0.0],
                     [
                         x as f32 / self.resolution as f32,
                         y as f32 / self.resolution as f32,
