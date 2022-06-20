@@ -1,14 +1,33 @@
-use crate::texture::Texture;
 use bevy::{
     math::Vec4,
-    render::render_resource::{encase, ShaderType},
+    prelude::*,
+    render::render_resource::{
+        encase::{self, UniformBuffer},
+        ShaderType,
+    },
 };
 use wgpu::util::DeviceExt;
+
+use crate::{model::Model, renderer::WgpuRenderer};
+
+// TODO
+// this is temporary until a Meshes have handles to their material and
+// Models are just a list of Mesh handles
+#[derive(Component)]
+pub struct GpuModelMaterials {
+    pub data: Vec<(
+        MaterialUniform,
+        wgpu::Buffer,
+        wgpu::BindGroup,
+        UniformBuffer<Vec<u8>>,
+    )>,
+}
 
 #[derive(ShaderType)]
 pub struct MaterialUniform {
     pub base_color: Vec4,
     pub alpha: f32,
+    pub gloss: f32,
 }
 
 pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -47,37 +66,87 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
-pub fn create_bind_group(
-    device: &wgpu::Device,
-    material: &MaterialUniform,
-    diffuse_texture: &Texture,
-) -> wgpu::BindGroup {
-    let byte_buffer = Vec::new();
-    let mut buffer = encase::UniformBuffer::new(byte_buffer);
-    buffer.write(&material).unwrap();
+#[allow(clippy::type_complexity)]
+pub fn create_material_uniform(
+    mut commands: Commands,
+    renderer: Res<WgpuRenderer>,
+    query: Query<(Entity, &Model), (Added<Model>, Without<GpuModelMaterials>)>,
+) {
+    for (entity, model) in query.iter() {
+        let mut gpu_materials = vec![];
+        for material in &model.materials {
+            let uniform = MaterialUniform {
+                base_color: material.base_color,
+                alpha: material.alpha,
+                gloss: material.gloss,
+            };
 
-    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        contents: buffer.as_ref(),
-        label: None,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
+            let byte_buffer = Vec::new();
+            let mut uniform_buffer = encase::UniformBuffer::new(byte_buffer);
+            uniform_buffer.write(&uniform).unwrap();
 
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("material_bind_group"),
-        layout: &bind_group_layout(device),
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-            },
-        ],
-    })
+            let buffer = renderer
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    contents: uniform_buffer.as_ref(),
+                    label: None,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
+
+            let bind_group = renderer
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("material_bind_group"),
+                    layout: &bind_group_layout(&renderer.device),
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(
+                                &material.diffuse_texture.view,
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Sampler(
+                                &material.diffuse_texture.sampler,
+                            ),
+                        },
+                    ],
+                });
+            gpu_materials.push((uniform, buffer, bind_group, uniform_buffer));
+        }
+        commands.entity(entity).insert(GpuModelMaterials {
+            data: gpu_materials,
+        });
+    }
+}
+
+pub fn update_material_buffer(
+    renderer: Res<WgpuRenderer>,
+    mut query: Query<(&Model, &mut GpuModelMaterials), Changed<Model>>,
+) {
+    for (model, mut gpu_materials) in query.iter_mut() {
+        for (i, mat) in model.materials.iter().enumerate() {
+            let u = MaterialUniform {
+                base_color: mat.base_color,
+                alpha: mat.alpha,
+                gloss: mat.gloss,
+            };
+            gpu_materials.data[i]
+                .3
+                .write(&u)
+                .expect("failed to write to material buffer");
+            // TODO I have no idea if this actually works since I don't change any material at runtime
+            renderer.queue.write_buffer(
+                &gpu_materials.data[i].1,
+                0,
+                gpu_materials.data[i].3.as_ref(),
+            );
+            gpu_materials.data[i].0 = u;
+        }
+    }
 }

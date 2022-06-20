@@ -1,10 +1,4 @@
-use crate::{
-    renderer::{
-        bind_groups::{self, material::MaterialUniform},
-        WgpuRenderer,
-    },
-    texture::Texture,
-};
+use crate::{renderer::bind_groups::material::GpuModelMaterials, texture::Texture};
 use bevy::{math::Vec4, prelude::Component};
 use std::ops::Range;
 
@@ -52,37 +46,45 @@ impl Model {
     pub fn draw<'a>(
         &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,
+        gpu_materials: &'a GpuModelMaterials,
         mesh_view_bind_group: &'a wgpu::BindGroup,
         transparent: bool,
     ) {
-        self.draw_instanced(render_pass, 0..1, mesh_view_bind_group, transparent);
+        self.draw_instanced(
+            render_pass,
+            0..1,
+            gpu_materials,
+            mesh_view_bind_group,
+            transparent,
+        );
     }
 
     pub fn draw_instanced<'a>(
         &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,
         instances: Range<u32>,
+        gpu_materials: &'a GpuModelMaterials,
         mesh_view_bind_group: &'a wgpu::BindGroup,
         transparent: bool,
     ) {
         for mesh in &self.meshes {
             // TODO get data from Handle
-            let material = &self.materials[mesh.material_id];
+            let material = &gpu_materials.data[mesh.material_id];
 
-            if transparent && material.alpha < 1.0 {
+            if transparent && material.0.alpha < 1.0 {
                 mesh.draw_instanced(
                     render_pass,
                     instances.clone(),
-                    material,
+                    &material.2,
                     mesh_view_bind_group,
                 );
             }
 
-            if !transparent && material.alpha == 1.0 {
+            if !transparent && material.0.alpha == 1.0 {
                 mesh.draw_instanced(
                     render_pass,
                     instances.clone(),
-                    material,
+                    &material.2,
                     mesh_view_bind_group,
                 );
             }
@@ -95,28 +97,19 @@ pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
     pub alpha: f32,
+    pub gloss: f32,
+    pub base_color: Vec4,
     // pub normal_texture: Texture,
-    pub bind_group: wgpu::BindGroup,
 }
 
 impl Material {
-    pub fn new(
-        renderer: &WgpuRenderer,
-        name: &str,
-        texture: Texture,
-        base_color: Vec4,
-        alpha: f32,
-    ) -> Self {
-        let bind_group = bind_groups::material::create_bind_group(
-            &renderer.device,
-            &MaterialUniform { base_color, alpha },
-            &texture,
-        );
+    pub fn new(name: &str, texture: Texture, base_color: Vec4, alpha: f32) -> Self {
         Self {
             name: name.to_string(),
             diffuse_texture: texture,
-            alpha: 1.0,
-            bind_group,
+            alpha,
+            base_color,
+            gloss: 75.0,
         }
     }
 }
@@ -136,23 +129,23 @@ impl ModelMesh {
     pub fn draw<'a>(
         &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,
-        material: &'a Material,
+        material_bind_group: &'a wgpu::BindGroup,
         mesh_view_bind_group: &'a wgpu::BindGroup,
     ) {
-        self.draw_instanced(render_pass, 0..1, material, mesh_view_bind_group);
+        self.draw_instanced(render_pass, 0..1, material_bind_group, mesh_view_bind_group);
     }
 
     pub fn draw_instanced<'a>(
         &'a self,
         render_pass: &mut wgpu::RenderPass<'a>,
         instances: Range<u32>,
-        material: &'a Material,
+        material_bind_group: &'a wgpu::BindGroup,
         mesh_view_bind_group: &'a wgpu::BindGroup,
     ) {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.set_bind_group(0, mesh_view_bind_group, &[]);
-        render_pass.set_bind_group(1, &material.bind_group, &[]);
+        render_pass.set_bind_group(1, material_bind_group, &[]);
         render_pass.draw_indexed(0..self.num_elements, 0, instances);
     }
 }

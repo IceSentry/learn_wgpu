@@ -3,6 +3,14 @@ use wgpu::util::DeviceExt;
 
 use crate::{camera::Camera, light::Light, renderer::WgpuRenderer};
 
+pub struct CameraBuffer(pub wgpu::Buffer);
+
+pub struct LightBuffer(pub wgpu::Buffer);
+
+pub struct MeshViewBindGroup(pub wgpu::BindGroup);
+
+pub struct MeshViewBindGroupLayout(pub wgpu::BindGroupLayout);
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
@@ -57,14 +65,6 @@ impl From<Light> for LightUniform {
         LightUniform::new(light.position, light.color)
     }
 }
-
-pub struct CameraBuffer(pub wgpu::Buffer);
-
-pub struct LightBuffer(pub wgpu::Buffer);
-
-pub struct MeshViewBindGroup(pub wgpu::BindGroup);
-
-pub struct MeshViewBindGroupLayout(pub wgpu::BindGroupLayout);
 
 pub fn setup_mesh_view_bind_group(
     mut commands: Commands,

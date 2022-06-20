@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     bind_groups::{
-        material,
+        material::{self, GpuModelMaterials},
         mesh_view::{MeshViewBindGroup, MeshViewBindGroupLayout},
     },
     depth_pass::DepthPass,
@@ -73,6 +73,7 @@ pub struct OpaquePass {
             &'static Model,
             &'static InstanceBuffer,
             Option<&'static Instances>,
+            &'static GpuModelMaterials,
         ),
         (Without<Light>, Without<Transparent>),
     >,
@@ -203,7 +204,9 @@ impl OpaquePass {
 
         // TODO figure out how to sort models
         render_pass.set_pipeline(&self.render_pipeline);
-        for (model, instance_buffer, instances) in self.model_query.iter_manual(world) {
+        for (model, instance_buffer, instances, gpu_materials) in
+            self.model_query.iter_manual(world)
+        {
             // The draw function also uses the instance buffer under the hood it simply is of size 1
             render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
             let transparent = false;
@@ -211,17 +214,25 @@ impl OpaquePass {
                 model.draw_instanced(
                     &mut render_pass,
                     0..instances.0.len() as u32,
+                    gpu_materials,
                     &mesh_view_bind_group.0,
                     transparent,
                 );
             } else {
-                model.draw(&mut render_pass, &mesh_view_bind_group.0, transparent);
+                model.draw(
+                    &mut render_pass,
+                    gpu_materials,
+                    &mesh_view_bind_group.0,
+                    transparent,
+                );
             }
         }
 
         // TODO I need a better way to identify transparent meshes in a model
         render_pass.set_pipeline(&self.transparent_render_pipeline);
-        for (model, instance_buffer, instances) in self.model_query.iter_manual(world) {
+        for (model, instance_buffer, instances, gpu_materials) in
+            self.model_query.iter_manual(world)
+        {
             // The draw function also uses the instance buffer under the hood it simply is of size 1
             render_pass.set_vertex_buffer(1, instance_buffer.0.slice(..));
             let transparent = true;
@@ -229,11 +240,17 @@ impl OpaquePass {
                 model.draw_instanced(
                     &mut render_pass,
                     0..instances.0.len() as u32,
+                    gpu_materials,
                     &mesh_view_bind_group.0,
                     transparent,
                 );
             } else {
-                model.draw(&mut render_pass, &mesh_view_bind_group.0, transparent);
+                model.draw(
+                    &mut render_pass,
+                    gpu_materials,
+                    &mesh_view_bind_group.0,
+                    transparent,
+                );
             }
         }
 

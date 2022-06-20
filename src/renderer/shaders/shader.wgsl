@@ -15,6 +15,7 @@ var<uniform> light: Light;
 struct Material {
     base_color: vec4<f32>;
     alpha: f32;
+    gloss: f32;
 };
 [[group(1), binding(0)]]
 var<uniform> material: Material;
@@ -107,23 +108,22 @@ fn vertex(
 fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
 
-    // TODO load ambient values from uniform buffer
-    let ambient_strength = 0.05;
-    let ambient_color = light.color * ambient_strength;
-
-    // let light_pos = camera.view_proj * in.model_matrix * light.position;
     let light_pos = light.position;
     let light_dir = normalize(light_pos - in.world_position.xyz);
 
-    let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
-    let diffuse_color = light.color * diffuse_strength;
+    // TODO load ambient values from uniform buffer
+    let ambient_strength = 0.025;
+    let ambient_color = light.color * ambient_strength;
+
+    // let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
+    let diffuse_strength = clamp(dot(in.world_normal, light_dir), 0.0, 1.0);
+    let diffuse_color = diffuse_strength * light.color;
 
     let view_dir = normalize(camera.view_pos.xyz - in.world_position.xyz);
-    let half_dir = normalize(view_dir + light_dir);
+    let half_dir = normalize(light_dir + view_dir);
 
-    var specular_strength = max(dot(in.world_normal, half_dir), 0.0);
-    let gloss = 32.0;
-    specular_strength = pow(specular_strength, gloss);
+    var specular_strength = clamp(dot(in.world_normal, half_dir), 0.0, 1.0) * f32(diffuse_strength > 0.0);
+    specular_strength = pow(specular_strength, material.gloss);
     let specular_color = specular_strength * light.color;
 
     let result = (ambient_color + diffuse_color + specular_color) * color.rgb * material.base_color.rgb;

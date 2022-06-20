@@ -55,6 +55,8 @@ impl Plugin for WgpuRendererPlugin {
             )
             .add_system(bind_groups::mesh_view::update_light_buffer)
             .add_system(bind_groups::mesh_view::update_camera_buffer)
+            .add_system(bind_groups::material::update_material_buffer)
+            .add_system(bind_groups::material::create_material_uniform)
             .add_system(instances::update_instance_buffer)
             .add_system(instances::create_instance_buffer)
             .add_system(resize);
