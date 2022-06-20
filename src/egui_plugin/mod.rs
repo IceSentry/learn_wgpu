@@ -1,7 +1,9 @@
 use bevy::{
+    app::AppExit,
     ecs::system::SystemState,
     input::mouse::{MouseButtonInput, MouseWheel},
     prelude::*,
+    window::WindowCloseRequested,
     winit::WinitWindows,
 };
 use winit::event::{DeviceId, ModifiersState};
@@ -32,7 +34,24 @@ impl Plugin for EguiPlugin {
             .add_startup_system(setup_render_pass.exclusive_system())
             .add_startup_system(setup_render_phase.exclusive_system())
             .add_system_to_stage(CoreStage::PreUpdate, begin_frame)
-            .add_system(handle_mouse_events);
+            .add_system(handle_mouse_events)
+            .add_system(on_exit);
+    }
+}
+
+fn on_exit(
+    exit: EventReader<AppExit>,
+    window_close: EventReader<WindowCloseRequested>,
+    egui_ctx: Res<egui::Context>,
+) {
+    if !exit.is_empty() || !window_close.is_empty() {
+        let mem = egui_ctx.memory().clone();
+        std::fs::write(
+            "egui.ron",
+            ron::ser::to_string_pretty(&mem, ron::ser::PrettyConfig::new())
+                .expect("failed to serialize egui memory"),
+        )
+        .expect("Failed to write egui memory");
     }
 }
 
@@ -49,7 +68,13 @@ fn setup(mut commands: Commands, windows: Res<Windows>) {
     let platform = egui_winit::State::new_with_wayland_display(None);
     commands.insert_resource(EguiWinitPlatform(platform));
 
-    commands.insert_resource(egui::Context::default())
+    let ctx = egui::Context::default();
+    if let Ok(mem) = std::fs::read_to_string("egui.ron") {
+        let mem: egui::Memory = ron::de::from_str(&mem).expect("Failed to deserialize egui.ron");
+        ctx.memory().clone_from(&mem);
+    }
+
+    commands.insert_resource(ctx);
 }
 
 fn setup_render_pass(world: &mut World) {
