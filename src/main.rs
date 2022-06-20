@@ -1,10 +1,8 @@
-use std::path::Path;
-
 use bevy::{
     app::AppExit,
     asset::AssetPlugin,
     input::{Input, InputPlugin},
-    math::{const_vec3, vec3, Quat, Vec3},
+    math::{const_vec3, Quat, Vec3},
     prelude::*,
     window::{CursorMoved, WindowDescriptor, WindowPlugin, Windows},
     winit::WinitPlugin,
@@ -39,14 +37,21 @@ mod transform;
 
 const NUM_INSTANCES_PER_ROW: u32 = 6;
 const SPACE_BETWEEN: f32 = 3.0;
-const LIGHT_POSITION: Vec3 = const_vec3!([4.5, 2.0, 0.0]);
+const LIGHT_POSITION: Vec3 = const_vec3!([4.5, 3.0, 0.0]);
+
+const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
+
+const MODEL_NAME: &str = "";
+// const INSTANCED_MODEL_NAME: &str = "";
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
-const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
+// const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
 // const MODEL_NAME: &str = "large_obj/bistro/Exterior/exterior.obj";
 const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+
 // const MODEL_NAME: &str = "bunny.obj";
 // const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
+
 const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
 const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
@@ -68,6 +73,9 @@ struct LightSettings {
 struct GlobalMaterialSettings {
     gloss: f32,
 }
+struct InstanceSettings {
+    move_instances: bool,
+}
 
 fn main() {
     env_logger::builder()
@@ -87,13 +95,16 @@ fn main() {
             clear_color: Color::rgba(0.1, 0.1, 0.1, 1.0),
             ..default()
         })
-        .insert_resource(CameraSettings { speed: 2.0 })
+        .insert_resource(CameraSettings { speed: 10.0 })
         .insert_resource(LightSettings {
             rotate: true,
             color: [1.0, 1.0, 1.0],
-            speed: 0.25,
+            speed: 0.15,
         })
         .insert_resource(GlobalMaterialSettings { gloss: 32.0 })
+        .insert_resource(InstanceSettings {
+            move_instances: false,
+        })
         .add_plugins(MinimalPlugins)
         .add_plugin(WindowPlugin::default())
         .add_plugin(WinitPlugin)
@@ -103,12 +114,10 @@ fn main() {
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(EguiPlugin)
         .add_startup_system(spawn_light)
-        .add_startup_system(spawn_shapes)
-        // .add_startup_system(load_obj_asset)
+        // .add_startup_system(spawn_shapes)
+        .add_startup_system(load_obj_asset)
         .add_system(update_window_title)
         .add_system(update_show_depth)
-        .add_system(handle_instanced_obj_loaded)
-        .add_system(handle_obj_loaded)
         // .add_system(cursor_moved)
         .add_system(move_instances)
         .add_system(update_light)
@@ -196,105 +205,18 @@ fn get_default_material(renderer: &WgpuRenderer, base_color: Color) -> model::Ma
         "default_texture",
     )
     .expect("Failed to load texture");
-    model::Material::new(
-        "default_material",
-        default_texture,
-        base_color.as_rgba_f32().into(),
-        1.0,
-    )
+    model::Material {
+        name: "default_material".to_string(),
+        diffuse_texture: default_texture,
+        alpha: 1.0,
+        gloss: 1.0,
+        base_color: base_color.as_rgba_f32().into(),
+    }
 }
 
 fn load_obj_asset(asset_server: Res<AssetServer>) {
     let _: Handle<LoadedObj> = asset_server.load(INSTANCED_MODEL_NAME);
     let _: Handle<LoadedObj> = asset_server.load(MODEL_NAME);
-}
-
-fn handle_obj_loaded(
-    mut commands: Commands,
-    obj_assets: ResMut<Assets<LoadedObj>>,
-    asset_server: Res<AssetServer>,
-    renderer: Res<WgpuRenderer>,
-    mut mesh_spawned: Local<bool>,
-) {
-    let loaded_obj = obj_assets.get(&asset_server.get_handle(MODEL_NAME));
-    if *mesh_spawned || loaded_obj.is_none() {
-        return;
-    }
-
-    let LoadedObj { models, materials } = loaded_obj.unwrap();
-
-    let model = resources::load_model(
-        INSTANCED_MODEL_NAME,
-        Path::new(&INSTANCED_MODEL_NAME),
-        models,
-        materials,
-        &renderer.device,
-        &renderer.queue,
-    )
-    .expect("failed to load model from obj");
-
-    commands.spawn_bundle((
-        model,
-        Transform {
-            scale: SCALE,
-            ..default()
-        },
-    ));
-    *mesh_spawned = true;
-}
-
-fn handle_instanced_obj_loaded(
-    mut commands: Commands,
-    obj_assets: ResMut<Assets<LoadedObj>>,
-    asset_server: Res<AssetServer>,
-    renderer: Res<WgpuRenderer>,
-    mut mesh_spawned: Local<bool>,
-) {
-    let loaded_obj = obj_assets.get(&asset_server.get_handle(INSTANCED_MODEL_NAME));
-    if *mesh_spawned || loaded_obj.is_none() {
-        return;
-    }
-
-    let LoadedObj { models, materials } = loaded_obj.unwrap();
-
-    let model = resources::load_model(
-        INSTANCED_MODEL_NAME,
-        Path::new(&INSTANCED_MODEL_NAME),
-        models,
-        materials,
-        &renderer.device,
-        &renderer.queue,
-    )
-    .expect("failed to load model from obj");
-
-    let mut instances = Vec::new();
-    for z in 0..=NUM_INSTANCES_PER_ROW {
-        for x in 0..=NUM_INSTANCES_PER_ROW {
-            let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-            let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-
-            let translation = vec3(x as f32, 0.0, z as f32);
-            let rotation = if translation == Vec3::ZERO {
-                Quat::from_axis_angle(Vec3::Y, 0.0)
-            } else {
-                Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
-            };
-
-            instances.push(Transform {
-                rotation,
-                translation,
-                scale: INSTANCED_SCALE,
-            });
-        }
-    }
-
-    commands
-        .spawn()
-        .insert(model)
-        .insert(Instances(instances))
-        .insert(Wave::default());
-
-    *mesh_spawned = true;
 }
 
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
@@ -327,7 +249,14 @@ fn cursor_moved(
     }
 }
 
-fn move_instances(time: Res<Time>, mut query: Query<(&mut Instances, &mut Wave)>) {
+fn move_instances(
+    time: Res<Time>,
+    mut query: Query<(&mut Instances, &mut Wave)>,
+    settings: Res<InstanceSettings>,
+) {
+    if !settings.move_instances {
+        return;
+    }
     for (mut instances, mut wave) in query.iter_mut() {
         wave.offset += time.delta_seconds() * wave.frequency;
         for instance in instances.0.iter_mut() {
@@ -403,6 +332,7 @@ fn settings_ui(
     mut camera_settings: ResMut<CameraSettings>,
     mut light_settings: ResMut<LightSettings>,
     mut global_material_settings: ResMut<GlobalMaterialSettings>,
+    mut instance_settings: ResMut<InstanceSettings>,
 ) {
     egui::Window::new("Settings")
         .resizable(true)
@@ -432,5 +362,11 @@ fn settings_ui(
                 &mut global_material_settings.gloss,
                 0.0..=1.0,
             ));
+
+            ui.separator();
+
+            ui.heading("Instances");
+
+            ui.checkbox(&mut instance_settings.move_instances, "Move");
         });
 }

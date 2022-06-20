@@ -27,6 +27,7 @@ impl Default for UVSphere {
 }
 
 impl UVSphere {
+    #[allow(unused)]
     pub fn mesh(&self, device: &wgpu::Device) -> ModelMesh {
         // Largely inspired from http://www.songho.ca/opengl/gl_self.html
 

@@ -102,18 +102,6 @@ pub struct Material {
     // pub normal_texture: Texture,
 }
 
-impl Material {
-    pub fn new(name: &str, texture: Texture, base_color: Vec4, alpha: f32) -> Self {
-        Self {
-            name: name.to_string(),
-            diffuse_texture: texture,
-            alpha,
-            base_color,
-            gloss: 75.0,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct ModelMesh {
     pub name: String,

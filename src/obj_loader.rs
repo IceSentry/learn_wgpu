@@ -12,6 +12,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::{
+    instances::Instances, renderer::WgpuRenderer, resources, transform::Transform, Wave,
+    INSTANCED_MODEL_NAME, INSTANCED_SCALE, MODEL_NAME, NUM_INSTANCES_PER_ROW, SCALE, SPACE_BETWEEN,
+};
+
 const ROOT_DIR: &str = "assets\\";
 
 pub struct ObjLoaderPlugin;
@@ -19,7 +24,10 @@ pub struct ObjLoaderPlugin;
 impl Plugin for ObjLoaderPlugin {
     fn build(&self, app: &mut App) {
         app.add_asset::<LoadedObj>()
-            .init_asset_loader::<ObjLoader>();
+            .init_asset_loader::<ObjLoader>()
+            // TODO improve loaded detection
+            .add_system(handle_obj_loaded)
+            .add_system(handle_instanced_obj_loaded);
     }
 }
 
@@ -158,4 +166,92 @@ fn load_texture(path: PathBuf) -> anyhow::Result<RgbaImage> {
     let data = std::fs::read(asset_path)?;
     let rgba = image::load_from_memory(&data)?.to_rgba8();
     Ok(rgba)
+}
+
+fn handle_obj_loaded(
+    mut commands: Commands,
+    obj_assets: ResMut<Assets<LoadedObj>>,
+    asset_server: Res<AssetServer>,
+    renderer: Res<WgpuRenderer>,
+    mut mesh_spawned: Local<bool>,
+) {
+    let loaded_obj = obj_assets.get(&asset_server.get_handle(MODEL_NAME));
+    if *mesh_spawned || loaded_obj.is_none() {
+        return;
+    }
+
+    let LoadedObj { models, materials } = loaded_obj.unwrap();
+
+    let model = resources::load_model(
+        INSTANCED_MODEL_NAME,
+        Path::new(&INSTANCED_MODEL_NAME),
+        models,
+        materials,
+        &renderer.device,
+        &renderer.queue,
+    )
+    .expect("failed to load model from obj");
+
+    commands.spawn_bundle((
+        model,
+        Transform {
+            scale: SCALE,
+            ..default()
+        },
+    ));
+    *mesh_spawned = true;
+}
+
+fn handle_instanced_obj_loaded(
+    mut commands: Commands,
+    obj_assets: ResMut<Assets<LoadedObj>>,
+    asset_server: Res<AssetServer>,
+    renderer: Res<WgpuRenderer>,
+    mut mesh_spawned: Local<bool>,
+) {
+    let loaded_obj = obj_assets.get(&asset_server.get_handle(INSTANCED_MODEL_NAME));
+    if *mesh_spawned || loaded_obj.is_none() {
+        return;
+    }
+
+    let LoadedObj { models, materials } = loaded_obj.unwrap();
+
+    let model = resources::load_model(
+        INSTANCED_MODEL_NAME,
+        Path::new(&INSTANCED_MODEL_NAME),
+        models,
+        materials,
+        &renderer.device,
+        &renderer.queue,
+    )
+    .expect("failed to load model from obj");
+
+    let mut instances = Vec::new();
+    for z in 0..=NUM_INSTANCES_PER_ROW {
+        for x in 0..=NUM_INSTANCES_PER_ROW {
+            let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+
+            let translation = Vec3::new(x as f32, 0.0, z as f32);
+            let rotation = if translation == Vec3::ZERO {
+                Quat::from_axis_angle(Vec3::Y, 0.0)
+            } else {
+                Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
+            };
+
+            instances.push(Transform {
+                rotation,
+                translation,
+                scale: INSTANCED_SCALE,
+            });
+        }
+    }
+
+    commands
+        .spawn()
+        .insert(model)
+        .insert(Instances(instances))
+        .insert(Wave::default());
+
+    *mesh_spawned = true;
 }

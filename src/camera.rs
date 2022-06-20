@@ -1,8 +1,7 @@
-use bevy::{input::mouse::MouseMotion, math::const_vec3, prelude::*};
+use bevy::{input::mouse::MouseMotion, prelude::*};
 
-use crate::{renderer::bind_groups::mesh_view::CameraUniform, CameraSettings};
+use crate::{renderer::bind_groups::mesh_view::CameraUniform, CameraSettings, CAMERRA_EYE};
 
-const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 2.0, 4.0]);
 const FRICTION: f32 = 0.5;
 
 pub struct CameraPlugin;

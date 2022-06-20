@@ -46,6 +46,7 @@ pub enum CapsuleUvProfile {
 }
 
 impl Capsule {
+    #[allow(unused)]
     pub fn mesh(&self, device: &wgpu::Device) -> ModelMesh {
         // code adapted from https://behreajj.medium.com/making-a-capsule-mesh-via-script-in-five-3d-environments-c2214abf02db
 
