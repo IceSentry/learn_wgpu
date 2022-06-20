@@ -98,7 +98,6 @@ fn vertex(
     var out: VertexOutput;
     out.uv = vertex.uv;
     out.world_normal = normal_matrix * vertex.normal;
-
     out.world_position = model_matrix * vec4<f32>(vertex.position, 1.0);
     out.clip_position = camera.view_proj * out.world_position;
     return out;
@@ -108,28 +107,28 @@ fn vertex(
 fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
 
+    let N = normalize(in.world_normal);
+
     let light_pos = light.position;
-    let light_dir = normalize(light_pos - in.world_position.xyz);
+    let L = normalize(light_pos - in.world_position.xyz);
 
     // TODO load ambient values from uniform buffer
     let ambient_strength = 0.05;
     let ambient_color = light.color * ambient_strength;
 
-    // let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
-    let diffuse_strength = clamp(dot(in.world_normal, light_dir), 0.0, 1.0);
+    // let diffuse_strength = max(dot(N, L), 0.0);
+    let diffuse_strength = clamp(dot(N, L), 0.0, 1.0);
     let diffuse_color = diffuse_strength * light.color;
 
     let view_dir = normalize(camera.view_pos.xyz - in.world_position.xyz);
-    let half_dir = normalize(light_dir + view_dir);
+    let half_dir = normalize(L + view_dir);
 
-    var specular_strength = clamp(dot(in.world_normal, half_dir), 0.0, 1.0) * f32(diffuse_strength > 0.0);
-    specular_strength = pow(specular_strength, material.gloss);
+    var specular_strength = clamp(dot(N, half_dir), 0.0, 1.0) * f32(diffuse_strength > 0.0);
+    specular_strength = pow(specular_strength, material.gloss) * material.gloss;
     let specular_color = specular_strength * light.color;
 
-    let result = (ambient_color + diffuse_color + specular_color) * color.rgb * material.base_color.rgb;
-    // let result = specular_color;
-    // let result = specular_color * in.world_normal;
-    // let result = in.world_normal;
+    // let result = (ambient_color + diffuse_color + specular_color) * color.rgb * material.base_color.rgb;
+    let result = specular_color;
     // let result = material.base_color.rgb;
 
     return vec4<f32>(result, color.a);
