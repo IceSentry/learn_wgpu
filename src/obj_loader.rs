@@ -32,6 +32,7 @@ pub struct ObjMaterial {
     pub diffuse_color: Vec4,
     pub diffuse_texture_data: RgbaImage,
     pub alpha: f32,
+    pub gloss: f32,
 }
 
 #[derive(Debug, TypeUuid)]
@@ -136,6 +137,7 @@ async fn load_obj<'a, 'b>(
             diffuse_color: Vec3::from(obj_material.diffuse).extend(obj_material.dissolve),
             diffuse_texture_data: texture,
             alpha: obj_material.dissolve,
+            gloss: obj_material.shininess,
         });
         log::info!(
             "Finished loading {} {:?}",

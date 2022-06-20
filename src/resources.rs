@@ -52,19 +52,12 @@ pub fn load_model(
     for m in obj_materials {
         let diffuse_texture =
             Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name))?;
-        let bind_group = crate::renderer::bind_groups::material::create_bind_group(
-            device,
-            &crate::renderer::bind_groups::material::MaterialUniform {
-                base_color: m.diffuse_color,
-                alpha: 1.0,
-            },
-            &diffuse_texture,
-        );
         materials.push(Material {
             name: m.name.clone(),
             diffuse_texture,
             alpha: m.alpha,
-            bind_group,
+            gloss: m.gloss,
+            base_color: m.diffuse_color,
         });
     }
     if materials.is_empty() {
@@ -73,19 +66,12 @@ pub fn load_model(
         path.push("pink.png");
 
         let diffuse_texture = load_texture(&path, device, queue)?;
-        let bind_group = crate::renderer::bind_groups::material::create_bind_group(
-            device,
-            &crate::renderer::bind_groups::material::MaterialUniform {
-                base_color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                alpha: 1.0,
-            },
-            &diffuse_texture,
-        );
         materials.push(Material {
             name: "default texture".to_string(),
             diffuse_texture,
             alpha: 1.0,
-            bind_group,
+            gloss: 0.0,
+            base_color: Vec4::ONE,
         });
     }
 
