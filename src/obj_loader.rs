@@ -19,6 +19,11 @@ use crate::{
 
 const ROOT_DIR: &str = "assets\\";
 
+// References:
+// <https://andrewnoske.com/wiki/OBJ_file_format>
+// <http://paulbourke.net/dataformats/mtl/>
+// <https://en.wikipedia.org/wiki/Wavefront_.obj_file>
+
 pub struct ObjLoaderPlugin;
 
 impl Plugin for ObjLoaderPlugin {
