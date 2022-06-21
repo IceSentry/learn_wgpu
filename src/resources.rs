@@ -103,7 +103,7 @@ pub fn load_model(
                     uv: if m.mesh.texcoords.is_empty() {
                         Vec2::ZERO
                     } else {
-                        // For some reasons the UVs are flipped
+                        // UVs are flipped
                         Vec2::new(m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1])
                     },
                     normal: if m.mesh.normals.is_empty() {
@@ -115,6 +115,8 @@ pub fn load_model(
                             m.mesh.normals[i * 3 + 2],
                         )
                     },
+                    tangent: Vec3::ZERO,
+                    bitangent: Vec3::ZERO,
                 })
                 .collect();
 
@@ -125,6 +127,7 @@ pub fn load_model(
 
             if m.mesh.normals.is_empty() {
                 mesh.compute_normals();
+                mesh.compute_tangents();
             }
 
             ModelMesh {

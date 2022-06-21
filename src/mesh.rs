@@ -7,6 +7,8 @@ pub struct Vertex {
     pub position: Vec3,
     pub normal: Vec3,
     pub uv: Vec2,
+    pub tangent: Vec3,
+    pub bitangent: Vec3,
 }
 
 impl Vertex {
@@ -15,6 +17,8 @@ impl Vertex {
             position,
             normal,
             uv,
+            tangent: Vec3::ZERO,
+            bitangent: Vec3::ZERO,
         }
     }
 
@@ -23,6 +27,8 @@ impl Vertex {
             position: Vec3::from(position),
             normal: Vec3::from(normal),
             uv: Vec2::from(uv),
+            tangent: Vec3::ZERO,
+            bitangent: Vec3::ZERO,
         }
     }
 
@@ -45,6 +51,16 @@ impl Vertex {
                     offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
                     shader_location: 2,
                     format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 11]>() as wgpu::BufferAddress,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
             ],
         }
@@ -121,6 +137,70 @@ impl Mesh {
                     normals.push(normal);
                 }
             }
+        }
+    }
+
+    pub fn compute_tangents(&mut self) {
+        if let Some(indices) = self.indices.as_ref() {
+            let mut triangles_included = (0..self.vertices.len()).collect::<Vec<_>>();
+            for c in indices.chunks(3) {
+                let v0 = self.vertices[c[0] as usize];
+                let v1 = self.vertices[c[1] as usize];
+                let v2 = self.vertices[c[2] as usize];
+
+                let pos0 = v0.position;
+                let pos1 = v1.position;
+                let pos2 = v2.position;
+
+                let uv0 = v0.uv;
+                let uv1 = v1.uv;
+                let uv2 = v2.uv;
+
+                // Calculate the edges of the triangle
+                let delta_pos1 = pos1 - pos0;
+                let delta_pos2 = pos2 - pos0;
+
+                // This will give us a direction to calculate the
+                // tangent and bitangent
+                let delta_uv1 = uv1 - uv0;
+                let delta_uv2 = uv2 - uv0;
+
+                // Solving the following system of equations will
+                // give us the tangent and bitangent.
+                //     delta_pos1 = delta_uv1.x * T + delta_u.y * B
+                //     delta_pos2 = delta_uv2.x * T + delta_uv2.y * B
+                // Luckily, the place I found this equation provided
+                // the solution!
+                let r = 1.0 / (delta_uv1.x * delta_uv2.y - delta_uv1.y * delta_uv2.x);
+                let tangent = (delta_pos1 * delta_uv2.y - delta_pos2 * delta_uv1.y) * r;
+                // We flip the bitangent to enable right-handed normal
+                // maps with wgpu texture coordinate system
+                let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * -r;
+
+                // We'll use the same tangent/bitangent for each vertex in the triangle
+                self.vertices[c[0] as usize].tangent += tangent;
+                self.vertices[c[1] as usize].tangent += tangent;
+                self.vertices[c[2] as usize].tangent += tangent;
+
+                self.vertices[c[0] as usize].bitangent += bitangent;
+                self.vertices[c[1] as usize].bitangent += bitangent;
+                self.vertices[c[2] as usize].bitangent += bitangent;
+
+                // Used to average the tangents/bitangents
+                triangles_included[c[0] as usize] += 1;
+                triangles_included[c[1] as usize] += 1;
+                triangles_included[c[2] as usize] += 1;
+            }
+
+            // Average the tangents/bitangents
+            for (i, n) in triangles_included.into_iter().enumerate() {
+                let denom = 1.0 / n as f32;
+                let mut v = &mut self.vertices[i];
+                v.tangent = (v.tangent * denom).normalize();
+                v.bitangent = (v.bitangent * denom).normalize();
+            }
+        } else {
+            todo!("tangents only computed for indexed meshes");
         }
     }
 }
