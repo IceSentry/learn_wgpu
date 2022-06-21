@@ -23,6 +23,10 @@ var<uniform> material: Material;
 var t_diffuse: texture_2d<f32>;
 [[group(1), binding(2)]]
 var s_diffuse: sampler;
+[[group(1), binding(3)]]
+var t_normal: texture_2d<f32>;
+[[group(1), binding(4)]]
+var s_normal: sampler;
 
 struct Vertex {
     [[location(0)]] position: vec3<f32>;
@@ -91,11 +95,15 @@ fn vertex(
 ) -> VertexOutput {
     let model_matrix = build_model_matrix(instance);
     let normal_matrix = build_normal_matrix(instance);
-    let inverse_transpose_model_matrix = build_inverse_transpose_model_matrix(instance);
 
-    let mv_matrix = model_matrix * camera.view_proj;
+    let world_normal = normal_matrix * vertex.normal;
+
+    let world_position = model_matrix * vec4<f32>(vertex.position, 1.0);
 
     var out: VertexOutput;
+    out.clip_position = camera.view_proj * world_position;
+    out.world_normal = world_normal;
+    out.world_position = world_position;
     out.uv = vertex.uv;
     out.world_normal = normal_matrix * vertex.normal;
     out.world_position = model_matrix * vec4<f32>(vertex.position, 1.0);
@@ -105,12 +113,13 @@ fn vertex(
 
 [[stage(fragment)]]
 fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
+    let object_color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
+    let object_normal: vec4<f32> = textureSample(t_normal, s_normal, in.uv);
 
-    let N = normalize(in.world_normal);
+    // let N = normalize(in.world_normal);
+    let N = object_normal.xyz * 2.0 - 1.0;
 
-    let light_pos = light.position;
-    let L = normalize(light_pos - in.world_position.xyz);
+    let L = normalize(light.position - in.world_position.xyz);
 
     let diffuse_strength = max(dot(N, L), 0.0);
     let diffuse_color = diffuse_strength * light.color;
@@ -134,11 +143,11 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let ambient_strength = 0.05;
     let ambient_color = ambient_strength * light.color;
 
-    let result = (ambient_color + diffuse_color + specular_color) * color.rgb * material.base_color.rgb;
+    let result = (ambient_color + diffuse_color + specular_color) * object_color.rgb * material.base_color.rgb;
     // let result = diffuse_color;
     // let result = specular_color;
     // let result = material.base_color.rgb;
     // let result = N;
 
-    return vec4<f32>(result, color.a);
+    return vec4<f32>(result, object_color.a);
 }

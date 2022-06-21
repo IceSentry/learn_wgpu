@@ -61,11 +61,11 @@ impl Model {
 #[derive(Debug)]
 pub struct Material {
     pub name: String,
-    pub diffuse_texture: Texture,
+    pub base_color: Vec4,
     pub alpha: f32,
     pub gloss: f32,
-    pub base_color: Vec4,
-    // pub normal_texture: Option<Texture>,
+    pub diffuse_texture: Texture,
+    pub normal_texture: Option<Texture>,
 }
 
 #[derive(Debug)]

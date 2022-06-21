@@ -62,6 +62,23 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
+            // normal_texture
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
         ],
     })
 }
@@ -93,6 +110,14 @@ pub fn create_material_uniform(
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
+            let normal_texture = {
+                if let Some(normal_texture) = &material.normal_texture {
+                    normal_texture
+                } else {
+                    todo!()
+                }
+            };
+
             let bind_group = renderer
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
@@ -103,6 +128,7 @@ pub fn create_material_uniform(
                             binding: 0,
                             resource: buffer.as_entire_binding(),
                         },
+                        // diffuse
                         wgpu::BindGroupEntry {
                             binding: 1,
                             resource: wgpu::BindingResource::TextureView(
@@ -114,6 +140,15 @@ pub fn create_material_uniform(
                             resource: wgpu::BindingResource::Sampler(
                                 &material.diffuse_texture.sampler,
                             ),
+                        },
+                        // normal
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::TextureView(&normal_texture.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
                         },
                     ],
                 });

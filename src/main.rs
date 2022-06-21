@@ -211,6 +211,7 @@ fn get_default_material(renderer: &WgpuRenderer, base_color: Color) -> model::Ma
         alpha: 1.0,
         gloss: 1.0,
         base_color: base_color.as_rgba_f32().into(),
+        normal_texture: None,
     }
 }
 

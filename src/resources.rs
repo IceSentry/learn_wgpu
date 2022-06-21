@@ -52,6 +52,10 @@ pub fn load_model(
     for m in obj_materials {
         let diffuse_texture =
             Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name))?;
+        let normal_texture = match &m.normal_texture_data {
+            Some(data) => Some(Texture::from_image(device, queue, data, Some(&m.name))?),
+            None => None,
+        };
         materials.push(Material {
             name: m.name.clone(),
             diffuse_texture,
@@ -59,6 +63,7 @@ pub fn load_model(
             // obj values are in the range 0-1000, but I need them to be 0-1
             gloss: m.gloss / 1000.0,
             base_color: m.base_color,
+            normal_texture,
         });
     }
     if materials.is_empty() {
@@ -73,6 +78,7 @@ pub fn load_model(
             alpha: 1.0,
             gloss: 0.0,
             base_color: Vec4::ONE,
+            normal_texture: None,
         });
     }
 
@@ -95,13 +101,13 @@ pub fn load_model(
                         m.mesh.positions[i * 3 + 2],
                     ),
                     uv: if m.mesh.texcoords.is_empty() {
-                        Vec2::new(0.0, 0.0)
+                        Vec2::ZERO
                     } else {
                         // For some reasons the UVs are flipped
                         Vec2::new(m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1])
                     },
                     normal: if m.mesh.normals.is_empty() {
-                        Vec3::new(0.0, 0.0, 0.0)
+                        Vec3::ZERO
                     } else {
                         Vec3::new(
                             m.mesh.normals[i * 3],
