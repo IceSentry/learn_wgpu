@@ -42,10 +42,11 @@ pub struct ObjLoader;
 #[derive(Debug)]
 pub struct ObjMaterial {
     pub name: String,
-    pub diffuse_color: Vec4,
-    pub diffuse_texture_data: RgbaImage,
+    pub base_color: Vec4,
     pub alpha: f32,
     pub gloss: f32,
+    pub diffuse_texture_data: RgbaImage,
+    pub normal_texture_data: Option<RgbaImage>,
 }
 
 #[derive(Debug, TypeUuid)]
@@ -137,20 +138,33 @@ async fn load_obj<'a, 'b>(
                 .with_context(|| format!("Failed to load texture {texture_path:?}"))
                 .unwrap();
             log::info!("Finished loading {texture_path:?}");
-            (obj_material, texture)
+
+            let normal_texture = if !obj_material.normal_texture.is_empty() {
+                let mut texture_path = parent_path.clone();
+                texture_path.push(obj_material.normal_texture.clone());
+                let texture = load_texture(texture_path.clone())
+                    .with_context(|| format!("Failed to load texture {texture_path:?}"))
+                    .unwrap();
+                log::info!("Finished loading {texture_path:?}");
+                Some(texture)
+            } else {
+                None
+            };
+            (obj_material, texture, normal_texture)
         });
         tasks.push(task);
     }
 
     let mut materials: Vec<ObjMaterial> = Vec::new();
     for task in tasks {
-        let (obj_material, texture) = task.await;
+        let (obj_material, texture, normal_texture) = task.await;
         materials.push(ObjMaterial {
             name: obj_material.name.clone(),
-            diffuse_color: Vec3::from(obj_material.diffuse).extend(obj_material.dissolve),
+            base_color: Vec3::from(obj_material.diffuse).extend(obj_material.dissolve),
             diffuse_texture_data: texture,
             alpha: obj_material.dissolve,
             gloss: obj_material.shininess,
+            normal_texture_data: normal_texture,
         });
         log::info!(
             "Finished loading {} {:?}",

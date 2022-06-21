@@ -58,7 +58,7 @@ pub fn load_model(
             alpha: m.alpha,
             // obj values are in the range 0-1000, but I need them to be 0-1
             gloss: m.gloss / 1000.0,
-            base_color: m.diffuse_color,
+            base_color: m.base_color,
         });
     }
     if materials.is_empty() {
