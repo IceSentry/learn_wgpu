@@ -32,6 +32,8 @@ struct Vertex {
     [[location(0)]] position: vec3<f32>;
     [[location(1)]] normal: vec3<f32>;
     [[location(2)]] uv: vec2<f32>;
+    [[location(3)]] tangent: vec3<f32>;
+    [[location(4)]] bitangent: vec3<f32>;
 };
 struct InstanceInput {
     [[location(5)]] model_matrix_0: vec4<f32>;
@@ -52,6 +54,9 @@ struct VertexOutput {
     [[location(0)]] world_position: vec4<f32>;
     [[location(1)]] world_normal: vec3<f32>;
     [[location(2)]] uv: vec2<f32>;
+    [[location(3)]] tangent_position: vec3<f32>;
+    [[location(4)]] tangent_light_position: vec3<f32>;
+    [[location(5)]] tangent_view_position: vec3<f32>;
 };
 
 fn build_model_matrix(instance: InstanceInput) -> mat4x4<f32> {
@@ -97,6 +102,13 @@ fn vertex(
     let normal_matrix = build_normal_matrix(instance);
 
     let world_normal = normal_matrix * vertex.normal;
+    let world_tangent = normalize(normal_matrix * vertex.tangent);
+    let world_bitangent = normalize(normal_matrix * vertex.bitangent);
+    let tangent_matrix = transpose(mat3x3<f32>(
+        world_tangent,
+        world_bitangent,
+        world_normal,
+    ));
 
     let world_position = model_matrix * vec4<f32>(vertex.position, 1.0);
 
@@ -105,9 +117,10 @@ fn vertex(
     out.world_normal = world_normal;
     out.world_position = world_position;
     out.uv = vertex.uv;
-    out.world_normal = normal_matrix * vertex.normal;
-    out.world_position = model_matrix * vec4<f32>(vertex.position, 1.0);
-    out.clip_position = camera.view_proj * out.world_position;
+
+    out.tangent_position = tangent_matrix * world_position.xyz;
+    out.tangent_view_position = tangent_matrix * camera.view_pos.xyz;
+    out.tangent_light_position = tangent_matrix * light.position;
     return out;
 }
 
@@ -119,13 +132,14 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     // let N = normalize(in.world_normal);
     let N = object_normal.xyz * 2.0 - 1.0;
 
-    let L = normalize(light.position - in.world_position.xyz);
+    let L = normalize(in.tangent_light_position - in.tangent_position);
+    let V = normalize(in.tangent_view_position - in.tangent_position);
+    // let L = normalize(light.position - in.world_position.xyz);
+    // let V = normalize(camera.view_pos.xyz - in.world_position.xyz);
+    let H = normalize(L + V);
 
     let diffuse_strength = max(dot(N, L), 0.0);
     let diffuse_color = diffuse_strength * light.color;
-
-    let V = normalize(camera.view_pos.xyz - in.world_position.xyz);
-    let H = normalize(L + V);
 
     var specular_strength = max(dot(N, H), 0.0);
 

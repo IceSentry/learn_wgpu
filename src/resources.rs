@@ -127,8 +127,9 @@ pub fn load_model(
 
             if m.mesh.normals.is_empty() {
                 mesh.compute_normals();
-                mesh.compute_tangents();
             }
+
+            mesh.compute_tangents();
 
             ModelMesh {
                 name: name.to_string(),
