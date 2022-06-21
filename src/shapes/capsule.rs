@@ -1,7 +1,7 @@
 use bevy::math::{Vec2, Vec3};
 use wgpu::util::DeviceExt;
 
-use crate::model::{ModelMesh, ModelVertex};
+use crate::{mesh::Vertex, model::ModelMesh};
 
 /// A cylinder with hemispheres at the top and bottom
 #[derive(Debug, Copy, Clone)]
@@ -359,11 +359,7 @@ impl Capsule {
 
         let mut vertices = Vec::new();
         for (i, position) in positions.iter().enumerate() {
-            vertices.push(ModelVertex {
-                position: position.to_array(),
-                normal: normals[i].to_array(),
-                uv: uvs[i].to_array(),
-            });
+            vertices.push(Vertex::new(*position, normals[i], uvs[i]));
         }
 
         assert_eq!(vertices.len(), vert_len);

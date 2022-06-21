@@ -2,40 +2,6 @@ use crate::{renderer::bind_groups::material::GpuModelMaterials, texture::Texture
 use bevy::{math::Vec4, prelude::Component};
 use std::ops::Range;
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct ModelVertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub uv: [f32; 2],
-}
-
-impl ModelVertex {
-    pub fn layout<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
 #[derive(Component)]
 pub struct Model {
     pub meshes: Vec<ModelMesh>,
@@ -99,7 +65,7 @@ pub struct Material {
     pub alpha: f32,
     pub gloss: f32,
     pub base_color: Vec4,
-    // pub normal_texture: Texture,
+    // pub normal_texture: Option<Texture>,
 }
 
 #[derive(Debug)]

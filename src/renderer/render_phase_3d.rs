@@ -5,7 +5,8 @@ use crate::{
     instances::InstanceBuffer,
     light::draw_light_model,
     light::Light,
-    model::{self, Model, ModelVertex},
+    mesh::{self},
+    model::Model,
     texture::Texture,
     transform::TransformRaw,
     Instances,
@@ -109,7 +110,7 @@ impl OpaquePass {
             "Opaque Render Pipeline",
             include_str!("shaders/shader.wgsl"),
             &render_pipeline_layout,
-            &[model::ModelVertex::layout(), TransformRaw::layout()],
+            &[mesh::Vertex::layout(), TransformRaw::layout()],
             Some(wgpu::DepthStencilState {
                 format: Texture::DEPTH_FORMAT,
                 depth_write_enabled: true,
@@ -124,7 +125,7 @@ impl OpaquePass {
             "Transparent Render Pipeline",
             include_str!("shaders/shader.wgsl"),
             &render_pipeline_layout,
-            &[model::ModelVertex::layout(), TransformRaw::layout()],
+            &[mesh::Vertex::layout(), TransformRaw::layout()],
             Some(wgpu::DepthStencilState {
                 format: Texture::DEPTH_FORMAT,
                 depth_write_enabled: true,
@@ -145,7 +146,7 @@ impl OpaquePass {
                     bind_group_layouts: &[&mesh_view_layout.0],
                     push_constant_ranges: &[],
                 }),
-            &[ModelVertex::layout()],
+            &[mesh::Vertex::layout()],
             Some(wgpu::DepthStencilState {
                 format: Texture::DEPTH_FORMAT,
                 depth_write_enabled: false,

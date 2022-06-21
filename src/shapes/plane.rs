@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::model::{ModelMesh, ModelVertex};
+use crate::{mesh::Vertex, model::ModelMesh};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Plane {
@@ -59,11 +59,7 @@ impl Plane {
 
         let vertices: Vec<_> = vertices
             .iter()
-            .map(|(position, normal, uv)| ModelVertex {
-                position: *position,
-                normal: *normal,
-                uv: *uv,
-            })
+            .map(|(position, normal, uv)| Vertex::from_arrays(*position, *normal, *uv))
             .collect();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

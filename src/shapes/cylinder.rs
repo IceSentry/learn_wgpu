@@ -1,7 +1,7 @@
 use bevy::math::Vec3;
 use wgpu::util::DeviceExt;
 
-use crate::model::{ModelMesh, ModelVertex};
+use crate::{mesh::Vertex, model::ModelMesh};
 
 /// A cylinder which stands on the XZ plane
 pub struct Cylinder {
@@ -118,11 +118,7 @@ impl Cylinder {
 
         let mut vertices = Vec::new();
         for (i, position) in positions.iter().enumerate() {
-            vertices.push(ModelVertex {
-                position: *position,
-                normal: normals[i],
-                uv: uvs[i],
-            });
+            vertices.push(Vertex::from_arrays(*position, normals[i], uvs[i]));
         }
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::model::{ModelMesh, ModelVertex};
+use crate::{mesh::Vertex, model::ModelMesh};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Cube {
@@ -59,13 +59,9 @@ impl Cube {
             ([self.min_x, self.min_y, self.max_z], [0., -1.0, 0.], [1.0, 0.]),
             ([self.min_x, self.min_y, self.min_z], [0., -1.0, 0.], [1.0, 1.0]),
             ([self.max_x, self.min_y, self.min_z], [0., -1.0, 0.], [0., 1.0]),
-        ].iter().map(|(position, normal, uv)| {
-            ModelVertex{
-                position: *position,
-                normal: *normal,
-                uv: *uv,
-            }
-        }).collect::<Vec<_>>();
+        ].iter()
+        .map(|(position, normal, uv)| Vertex::from_arrays(*position, *normal, *uv))
+        .collect::<Vec<_>>();
 
         let indices: Vec<u32> = vec![
             0, 1, 2, 2, 3, 0, // top
