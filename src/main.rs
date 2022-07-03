@@ -42,7 +42,7 @@ const LIGHT_POSITION: Vec3 = const_vec3!([4.5, 3.0, 0.0]);
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
 const MODEL_NAME: &str = "";
-// const INSTANCED_MODEL_NAME: &str = "";
+const INSTANCED_MODEL_NAME: &str = "";
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
 // const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
@@ -52,7 +52,7 @@ const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 // const MODEL_NAME: &str = "bunny.obj";
 // const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 
-const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
+// const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
 const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out MSAA
@@ -114,7 +114,7 @@ fn main() {
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(EguiPlugin)
         .add_startup_system(spawn_light)
-        // .add_startup_system(spawn_shapes)
+        .add_startup_system(spawn_shapes)
         .add_startup_system(load_obj_asset)
         .add_system(update_window_title)
         .add_system(update_show_depth)
@@ -150,7 +150,30 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             size: 5.0,
         }
         .mesh(&renderer.device)],
-        materials: vec![get_default_material(&renderer, Color::GREEN)],
+        materials: vec![model::Material {
+            name: "rock_material".to_string(),
+            diffuse_texture: Texture::from_bytes(
+                &renderer.device,
+                &renderer.queue,
+                &std::fs::read("assets/rock_plane/Rock-Albedo.png")
+                    .expect("failed to read rock_albedo"),
+                "rock_albedo",
+            )
+            .expect("failed to load rock albedo"),
+            alpha: 1.0,
+            gloss: 1.0,
+            base_color: Color::WHITE.as_rgba_f32().into(),
+            normal_texture: Some(
+                Texture::from_bytes(
+                    &renderer.device,
+                    &renderer.queue,
+                    &std::fs::read("assets/rock_plane/Rock-Normal.png")
+                        .expect("failed to read rock_albedo"),
+                    "rock_albedo",
+                )
+                .expect("failed to load rock albedo"),
+            ),
+        }],
     };
     commands.spawn_bundle((
         plane,
@@ -198,13 +221,8 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 }
 
 fn get_default_material(renderer: &WgpuRenderer, base_color: Color) -> model::Material {
-    let default_texture = Texture::from_bytes(
-        &renderer.device,
-        &renderer.queue,
-        &std::fs::read("assets/white.png").expect("failed to load white.png"),
-        "default_texture",
-    )
-    .expect("Failed to load texture");
+    let default_texture = Texture::default_white(&renderer.device, &renderer.queue)
+        .expect("Failed to load white texture");
     model::Material {
         name: "default_material".to_string(),
         diffuse_texture: default_texture,

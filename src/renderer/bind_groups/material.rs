@@ -8,7 +8,7 @@ use bevy::{
 };
 use wgpu::util::DeviceExt;
 
-use crate::{model::Model, renderer::WgpuRenderer};
+use crate::{model::Model, renderer::WgpuRenderer, texture::Texture};
 
 // TODO
 // this is temporary until a Meshes have handles to their material and
@@ -110,13 +110,10 @@ pub fn create_material_uniform(
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
-            let normal_texture = {
-                if let Some(normal_texture) = &material.normal_texture {
-                    normal_texture
-                } else {
-                    todo!()
-                }
-            };
+            // Store default somewhere instead of creating a new one all the time
+            let default = Texture::default_white(&renderer.device, &renderer.queue)
+                .expect("Failed to generate default_white");
+            let normal_texture = material.normal_texture.as_ref().unwrap_or(&default);
 
             let bind_group = renderer
                 .device

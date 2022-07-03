@@ -1,3 +1,5 @@
+use image::DynamicImage;
+
 #[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,
@@ -7,6 +9,30 @@ pub struct Texture {
 
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    pub fn default_white(device: &wgpu::Device, queue: &wgpu::Queue) -> anyhow::Result<Self> {
+        Self::solid_color(device, queue, [255, 255, 255])
+    }
+
+    /// Color components must be in range 0-255
+    pub fn solid_color(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        color: [u8; 3],
+    ) -> anyhow::Result<Self> {
+        use image::{Rgba, RgbaImage};
+
+        let mut rgba = RgbaImage::new(1, 1);
+        rgba.put_pixel(0, 0, Rgba([color[0], color[1], color[2], 255]));
+        let rgba = DynamicImage::ImageRgba8(rgba).to_rgba8();
+
+        Self::from_image(
+            device,
+            queue,
+            &DynamicImage::ImageRgba8(rgba).to_rgba8(),
+            Some("default_white"),
+        )
+    }
 
     pub fn from_bytes(
         device: &wgpu::Device,

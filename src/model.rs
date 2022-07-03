@@ -1,4 +1,4 @@
-use crate::{renderer::bind_groups::material::GpuModelMaterials, texture::Texture};
+use crate::{mesh::Mesh, renderer::bind_groups::material::GpuModelMaterials, texture::Texture};
 use bevy::{math::Vec4, prelude::Component};
 use std::ops::Range;
 
@@ -79,6 +79,19 @@ pub struct ModelMesh {
 }
 
 impl ModelMesh {
+    pub fn from_mesh(label: &str, device: &wgpu::Device, mesh: Mesh, material_id: usize) -> Self {
+        let mut mesh = mesh;
+        mesh.compute_tangents();
+
+        ModelMesh {
+            name: label.to_string(),
+            vertex_buffer: mesh.get_vertex_buffer(device),
+            index_buffer: mesh.get_index_buffer(device),
+            num_elements: mesh.indices.map(|i| i.len() as u32).unwrap_or(1),
+            material_id,
+        }
+    }
+
     #[allow(unused)]
     pub fn draw<'a>(
         &'a self,

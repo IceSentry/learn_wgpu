@@ -1,6 +1,7 @@
-use wgpu::util::DeviceExt;
-
-use crate::{mesh::Vertex, model::ModelMesh};
+use crate::{
+    mesh::{Mesh, Vertex},
+    model::ModelMesh,
+};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Plane {
@@ -62,23 +63,14 @@ impl Plane {
             .map(|(position, normal, uv)| Vertex::from_arrays(*position, *normal, *uv))
             .collect();
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        ModelMesh {
-            name: "capsule".to_string(),
-            vertex_buffer,
-            index_buffer,
-            num_elements: indices.len() as u32,
-            material_id: 0,
-        }
+        ModelMesh::from_mesh(
+            "capsule",
+            device,
+            Mesh {
+                vertices,
+                indices: Some(indices),
+            },
+            0,
+        )
     }
 }

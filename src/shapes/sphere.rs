@@ -2,7 +2,10 @@ use std::f32::consts::PI;
 
 use wgpu::util::DeviceExt;
 
-use crate::{mesh::Vertex, model::ModelMesh};
+use crate::{
+    mesh::{Mesh, Vertex},
+    model::ModelMesh,
+};
 
 /// A sphere made of sectors and stacks.
 #[allow(clippy::upper_case_acronyms)]
@@ -87,23 +90,14 @@ impl UVSphere {
             vertices.push(Vertex::from_arrays(*position, normals[i], uvs[i]));
         }
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        ModelMesh {
-            name: "uv_sphere".to_string(),
-            vertex_buffer,
-            index_buffer,
-            num_elements: indices.len() as u32,
-            material_id: 0,
-        }
+        ModelMesh::from_mesh(
+            "uv_sphere",
+            device,
+            Mesh {
+                vertices,
+                indices: Some(indices),
+            },
+            0,
+        )
     }
 }
