@@ -28,6 +28,27 @@ pub struct MaterialUniform {
     pub base_color: Vec4,
     pub alpha: f32,
     pub gloss: f32,
+    pub flags: u32,
+}
+
+// WARN these must match the flags in shader.wgsl
+bitflags::bitflags! {
+    #[repr(transparent)]
+    pub struct MaterialFlags: u32 {
+        const USE_NORMAL_MAP = (1 << 0);
+        const _1 = (1 << 1);
+        const _2 = (1 << 2);
+        const _3 = (1 << 3);
+        const _4 = (1 << 4);
+        const _5 = (1 << 5);
+        const _6 = (1 << 6);
+        const _7 = (1 << 7);
+        const _8 = (1 << 8);
+        const _9 = (1 << 9);
+        const _10 = (1 << 10);
+        const NONE = 0;
+        const UNINITIALIZED = 0xFFFF;
+    }
 }
 
 pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -37,7 +58,7 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             // material
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -96,6 +117,11 @@ pub fn create_material_uniform(
                 base_color: material.base_color,
                 alpha: material.alpha,
                 gloss: material.gloss,
+                flags: if material.normal_texture.is_some() {
+                    MaterialFlags::USE_NORMAL_MAP.bits()
+                } else {
+                    MaterialFlags::NONE.bits()
+                },
             };
 
             let byte_buffer = Vec::new();
@@ -167,6 +193,11 @@ pub fn update_material_buffer(
                 base_color: mat.base_color,
                 alpha: mat.alpha,
                 gloss: mat.gloss,
+                flags: if mat.normal_texture.is_some() {
+                    MaterialFlags::USE_NORMAL_MAP.bits()
+                } else {
+                    MaterialFlags::NONE.bits()
+                },
             };
             gpu_materials.data[i]
                 .3
