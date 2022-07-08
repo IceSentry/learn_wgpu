@@ -23,6 +23,7 @@ pub fn load_texture(
     file_name: &PathBuf,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    format: Option<wgpu::TextureFormat>,
 ) -> anyhow::Result<Texture> {
     let data =
         load_bytes(file_name).with_context(|| format!("Failed to load texture {file_name:?}"))?;
@@ -31,6 +32,7 @@ pub fn load_texture(
         queue,
         &data,
         &file_name.file_name().unwrap().to_string_lossy(),
+        format,
     )
     .with_context(|| "Failed to create Texture from bytes".to_string())
 }
@@ -51,9 +53,15 @@ pub fn load_model(
     let mut materials = Vec::new();
     for m in obj_materials {
         let diffuse_texture =
-            Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name))?;
+            Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name), None)?;
         let normal_texture = match &m.normal_texture_data {
-            Some(data) => Some(Texture::from_image(device, queue, data, Some(&m.name))?),
+            Some(data) => Some(Texture::from_image(
+                device,
+                queue,
+                data,
+                Some(&m.name),
+                Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            )?),
             None => None,
         };
         materials.push(Material {
@@ -71,7 +79,7 @@ pub fn load_model(
         path.pop();
         path.push("pink.png");
 
-        let diffuse_texture = load_texture(&path, device, queue)?;
+        let diffuse_texture = load_texture(&path, device, queue, None)?;
         materials.push(Material {
             name: "default texture".to_string(),
             diffuse_texture,

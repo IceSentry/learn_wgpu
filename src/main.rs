@@ -158,6 +158,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
                 &std::fs::read("assets/rock_plane/Rock-Albedo.png")
                     .expect("failed to read rock_albedo"),
                 "rock_albedo",
+                None,
             )
             .expect("failed to load rock albedo"),
             alpha: 1.0,
@@ -170,6 +171,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
                     &std::fs::read("assets/rock_plane/Rock-Normal.png")
                         .expect("failed to read rock_albedo"),
                     "rock_albedo",
+                    Some(wgpu::TextureFormat::Rgba8UnormSrgb),
                 )
                 .expect("failed to load rock albedo"),
             ),

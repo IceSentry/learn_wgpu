@@ -31,6 +31,7 @@ impl Texture {
             queue,
             &DynamicImage::ImageRgba8(rgba).to_rgba8(),
             Some("default_white"),
+            None,
         )
     }
 
@@ -39,9 +40,10 @@ impl Texture {
         queue: &wgpu::Queue,
         bytes: &[u8],
         label: &str,
+        format: Option<wgpu::TextureFormat>,
     ) -> anyhow::Result<Self> {
         let img = image::load_from_memory(bytes)?;
-        Self::from_image(device, queue, &img.to_rgba8(), Some(label))
+        Self::from_image(device, queue, &img.to_rgba8(), Some(label), format)
     }
 
     pub fn from_image(
@@ -49,7 +51,9 @@ impl Texture {
         queue: &wgpu::Queue,
         rgba: &image::RgbaImage,
         label: Option<&str>,
+        format: Option<wgpu::TextureFormat>,
     ) -> anyhow::Result<Self> {
+        let format = format.unwrap_or(wgpu::TextureFormat::Rgba8UnormSrgb);
         let (texture_width, texture_height) = rgba.dimensions();
 
         let size = wgpu::Extent3d {
@@ -63,7 +67,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         });
 
