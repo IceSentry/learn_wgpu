@@ -41,11 +41,11 @@ const LIGHT_POSITION: Vec3 = const_vec3!([4.5, 3.0, 0.0]);
 
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
-const MODEL_NAME: &str = "";
+// const MODEL_NAME: &str = "";
 const INSTANCED_MODEL_NAME: &str = "";
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
-// const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
+const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
 // const MODEL_NAME: &str = "large_obj/bistro/Exterior/exterior.obj";
 const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 
@@ -99,9 +99,9 @@ fn main() {
         .insert_resource(LightSettings {
             rotate: true,
             color: [1.0, 1.0, 1.0],
-            speed: 0.15,
+            speed: 0.35,
         })
-        .insert_resource(GlobalMaterialSettings { gloss: 32.0 })
+        .insert_resource(GlobalMaterialSettings { gloss: 0.5 })
         .insert_resource(InstanceSettings {
             move_instances: false,
         })

@@ -1,7 +1,5 @@
 use std::f32::consts::PI;
 
-use wgpu::util::DeviceExt;
-
 use crate::{
     mesh::{Mesh, Vertex},
     model::ModelMesh,

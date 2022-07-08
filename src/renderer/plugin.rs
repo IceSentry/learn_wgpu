@@ -68,11 +68,10 @@ fn init_renderer(
     windows: Res<Windows>,
     winit_windows: NonSendMut<WinitWindows>,
 ) {
-    let window_id = windows.get_primary().expect("bevy window not found").id();
-
-    let winit_window = winit_windows
-        .get_window(window_id)
-        .expect("winit window not found");
+    let winit_window = windows
+        .get_primary()
+        .and_then(|window| winit_windows.get_window(window.id()))
+        .expect("Failed to get window");
 
     let renderer = future::block_on(WgpuRenderer::new(winit_window));
     commands.insert_resource(renderer);
