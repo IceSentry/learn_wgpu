@@ -10,5 +10,5 @@ newmtl Material
     Ni 1.450000
     d 1.000000
     illum 2
-    map_Kd cube-diffuse.jpg
-    map_Bump cube-normal.png
+    map_Kd container2.png
+    map_Ks container2_specular.png

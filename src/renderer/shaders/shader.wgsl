@@ -16,6 +16,7 @@ struct Material {
     base_color: vec4<f32>;
     alpha: f32;
     gloss: f32;
+    specular_color: vec3<f32>;
     flags: u32;
 };
 
@@ -33,14 +34,21 @@ let MATERIAL_FLAGS_0: u32 = 1024u;
 
 [[group(1), binding(0)]]
 var<uniform> material: Material;
+
 [[group(1), binding(1)]]
 var t_diffuse: texture_2d<f32>;
 [[group(1), binding(2)]]
 var s_diffuse: sampler;
+
 [[group(1), binding(3)]]
 var t_normal: texture_2d<f32>;
 [[group(1), binding(4)]]
 var s_normal: sampler;
+
+[[group(1), binding(5)]]
+var t_spec: texture_2d<f32>;
+[[group(1), binding(6)]]
+var s_spec: sampler;
 
 struct Vertex {
     [[location(0)]] position: vec3<f32>;
@@ -138,13 +146,13 @@ fn vertex(
         out.tangent_light_position = tangent_matrix * light.position;
     }
 
-
     return out;
 }
 
 [[stage(fragment)]]
 fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let object_color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
+    let object_specular: vec4<f32> = textureSample(t_spec, s_spec, in.uv);
 
     var N: vec3<f32>;
     var L: vec3<f32>;
@@ -155,33 +163,32 @@ fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
         N = object_normal.xyz * 2.0 - 1.0;
         L = normalize(in.tangent_light_position - in.tangent_position);
         V = normalize(in.tangent_view_position - in.tangent_position);
+        // return vec4<f32>(0.0, 0.0, 1.0, 1.0);
     } else {
         N = normalize(in.world_normal);
         L = normalize(light.position - in.world_position.xyz);
         V = normalize(camera.view_pos.xyz - in.world_position.xyz);
+        // return vec4<f32>(1.0, 0.0, 0.0, 1.0);
     }
 
     let H = normalize(L + V);
 
+    // TODO load ambient values from uniform buffer
+    let ambient_strength = 0.1;
+
     let diffuse_strength = max(dot(N, L), 0.0);
-    let diffuse_color = diffuse_strength * light.color;
 
     var specular_strength = max(dot(in.world_normal, H), 0.0);
-
     // Make sure the specular light doesn't go pass the lambertian diffuse light
     // this fixes a small artifact, but introduces very sharp cutoff
     specular_strength = specular_strength * f32(diffuse_strength > 0.0);
-
     let specular_exp = exp2(material.gloss * 11.0) + 2.0;
     specular_strength = pow(specular_strength, specular_exp);
 
-    let specular_color = specular_strength * light.color;
-
-    // TODO load ambient values from uniform buffer
-    let ambient_strength = 0.1;
-    let ambient_color = ambient_strength * light.color;
-
-    let result = (ambient_color + diffuse_color + specular_color) * object_color.rgb * material.base_color.rgb;
+    let ambient_color = ambient_strength * object_color.rgb * material.base_color.rgb;
+    let diffuse_color = diffuse_strength * object_color.rgb * material.base_color.rgb;
+    let specular_color = specular_strength * object_specular.rgb * material.specular_color;
+    let result = (ambient_color + diffuse_color + specular_color) * light.color;
     // let result = diffuse_color;
     // let result = specular_color;
     // let result = object_color.rgb;

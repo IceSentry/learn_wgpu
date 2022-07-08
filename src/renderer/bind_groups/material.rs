@@ -28,6 +28,7 @@ pub struct MaterialUniform {
     pub base_color: Vec4,
     pub alpha: f32,
     pub gloss: f32,
+    pub specular: Vec3,
     pub flags: u32,
 }
 
@@ -100,6 +101,23 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
+            // specular_texture
+            wgpu::BindGroupLayoutEntry {
+                binding: 5,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 6,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
         ],
     })
 }
@@ -117,6 +135,7 @@ pub fn create_material_uniform(
                 base_color: material.base_color,
                 alpha: material.alpha,
                 gloss: material.gloss,
+                specular: material.specular,
                 flags: if material.normal_texture.is_some() {
                     MaterialFlags::USE_NORMAL_MAP.bits()
                 } else {
@@ -136,10 +155,11 @@ pub fn create_material_uniform(
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
-            // Store default somewhere instead of creating a new one all the time
-            let default = Texture::default_white(&renderer.device, &renderer.queue)
+            let default_white = Texture::default_white(&renderer.device, &renderer.queue)
                 .expect("Failed to generate default_white");
-            let normal_texture = material.normal_texture.as_ref().unwrap_or(&default);
+
+            let normal_texture = material.normal_texture.as_ref().unwrap_or(&default_white);
+            let specular_texture = material.specular_texture.as_ref().unwrap_or(&default_white);
 
             let bind_group = renderer
                 .device
@@ -173,6 +193,15 @@ pub fn create_material_uniform(
                             binding: 4,
                             resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
                         },
+                        // specular
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: wgpu::BindingResource::TextureView(&specular_texture.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 6,
+                            resource: wgpu::BindingResource::Sampler(&specular_texture.sampler),
+                        },
                     ],
                 });
             gpu_materials.push((uniform, buffer, bind_group, uniform_buffer));
@@ -193,6 +222,7 @@ pub fn update_material_buffer(
                 base_color: mat.base_color,
                 alpha: mat.alpha,
                 gloss: mat.gloss,
+                specular: mat.specular,
                 flags: if mat.normal_texture.is_some() {
                     MaterialFlags::USE_NORMAL_MAP.bits()
                 } else {

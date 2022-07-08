@@ -37,7 +37,7 @@ mod transform;
 
 const NUM_INSTANCES_PER_ROW: u32 = 6;
 const SPACE_BETWEEN: f32 = 3.0;
-const LIGHT_POSITION: Vec3 = const_vec3!([4.5, 3.0, 0.0]);
+const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
@@ -45,14 +45,19 @@ const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 const INSTANCED_MODEL_NAME: &str = "";
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
-const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
+// const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
 // const MODEL_NAME: &str = "large_obj/bistro/Exterior/exterior.obj";
-const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+// const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
+
+const MODEL_NAME: &str = "cube/cube.obj";
+// const MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
+const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // const MODEL_NAME: &str = "bunny.obj";
 // const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 
 // const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
+// const INSTANCED_MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
 const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // TODO figure out MSAA
@@ -114,7 +119,7 @@ fn main() {
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(EguiPlugin)
         .add_startup_system(spawn_light)
-        .add_startup_system(spawn_shapes)
+        // .add_startup_system(spawn_shapes)
         .add_startup_system(load_obj_asset)
         .add_system(update_window_title)
         .add_system(update_show_depth)
@@ -163,6 +168,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
             .expect("failed to load rock albedo"),
             alpha: 1.0,
             gloss: 1.0,
+            specular: Vec3::new(1.0, 1.0, 1.0),
             base_color: Color::WHITE.as_rgba_f32().into(),
             normal_texture: Some(
                 Texture::from_bytes(
@@ -175,6 +181,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
                 )
                 .expect("failed to load rock albedo"),
             ),
+            specular_texture: None,
         }],
     };
     commands.spawn_bundle((
@@ -230,8 +237,10 @@ fn get_default_material(renderer: &WgpuRenderer, base_color: Color) -> model::Ma
         diffuse_texture: default_texture,
         alpha: 1.0,
         gloss: 1.0,
+        specular: Vec3::new(1.0, 1.0, 1.0),
         base_color: base_color.as_rgba_f32().into(),
         normal_texture: None,
+        specular_texture: None,
     }
 }
 
@@ -341,11 +350,11 @@ fn update_materials(mut query: Query<&mut Model>, settings: Res<GlobalMaterialSe
         return;
     }
 
-    for mut model in query.iter_mut() {
-        for mut material in model.materials.iter_mut() {
-            material.gloss = settings.gloss;
-        }
-    }
+    // for mut model in query.iter_mut() {
+    //     for mut material in model.materials.iter_mut() {
+    //         material.gloss = settings.gloss;
+    //     }
+    // }
 }
 
 fn settings_ui(

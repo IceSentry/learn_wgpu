@@ -53,8 +53,8 @@ pub fn load_model(
     let mut materials = Vec::new();
     for m in obj_materials {
         let diffuse_texture =
-            Texture::from_image(device, queue, &m.diffuse_texture_data, Some(&m.name), None)?;
-        let normal_texture = match &m.normal_texture_data {
+            Texture::from_image(device, queue, &m.diffuse_texture, Some(&m.name), None)?;
+        let normal_texture = match &m.normal_texture {
             Some(data) => Some(Texture::from_image(
                 device,
                 queue,
@@ -64,14 +64,28 @@ pub fn load_model(
             )?),
             None => None,
         };
+
+        let specular_texture = match &m.specular_texture {
+            Some(data) => Some(Texture::from_image(
+                device,
+                queue,
+                data,
+                Some(&m.name),
+                Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            )?),
+            None => None,
+        };
+
         materials.push(Material {
             name: m.name.clone(),
             diffuse_texture,
             alpha: m.alpha,
             // obj values are in the range 0-1000, but I need them to be 0-1
             gloss: m.gloss / 1000.0,
+            specular: m.specular,
             base_color: m.base_color,
             normal_texture,
+            specular_texture,
         });
     }
     if materials.is_empty() {
@@ -85,8 +99,10 @@ pub fn load_model(
             diffuse_texture,
             alpha: 1.0,
             gloss: 0.0,
+            specular: Vec3::ONE,
             base_color: Vec4::ONE,
             normal_texture: None,
+            specular_texture: None,
         });
     }
 

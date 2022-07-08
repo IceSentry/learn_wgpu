@@ -45,8 +45,10 @@ pub struct ObjMaterial {
     pub base_color: Vec4,
     pub alpha: f32,
     pub gloss: f32,
-    pub diffuse_texture_data: RgbaImage,
-    pub normal_texture_data: Option<RgbaImage>,
+    pub specular: Vec3,
+    pub diffuse_texture: RgbaImage,
+    pub normal_texture: Option<RgbaImage>,
+    pub specular_texture: Option<RgbaImage>,
 }
 
 #[derive(Debug, TypeUuid)]
@@ -150,21 +152,37 @@ async fn load_obj<'a, 'b>(
             } else {
                 None
             };
-            (obj_material, texture, normal_texture)
+
+            let specular_texture = if !obj_material.specular_texture.is_empty() {
+                log::info!("SPECULAR {texture_path:?}");
+                let mut texture_path = parent_path.clone();
+                texture_path.push(obj_material.specular_texture.clone());
+                let texture = load_texture(texture_path.clone())
+                    .with_context(|| format!("Failed to load texture {texture_path:?}"))
+                    .unwrap();
+                log::info!("Finished loading {texture_path:?}");
+                Some(texture)
+            } else {
+                None
+            };
+
+            (obj_material, texture, normal_texture, specular_texture)
         });
         tasks.push(task);
     }
 
     let mut materials: Vec<ObjMaterial> = Vec::new();
     for task in tasks {
-        let (obj_material, texture, normal_texture) = task.await;
+        let (obj_material, texture, normal_texture, specular_texture) = task.await;
         materials.push(ObjMaterial {
             name: obj_material.name.clone(),
             base_color: Vec3::from(obj_material.diffuse).extend(obj_material.dissolve),
-            diffuse_texture_data: texture,
+            diffuse_texture: texture,
             alpha: obj_material.dissolve,
             gloss: obj_material.shininess,
-            normal_texture_data: normal_texture,
+            specular: Vec3::from(obj_material.specular),
+            normal_texture,
+            specular_texture,
         });
         log::info!(
             "Finished loading {} {:?}",
