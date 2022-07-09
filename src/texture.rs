@@ -10,11 +10,13 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
+    #[allow(unused)]
     pub fn default_white(device: &wgpu::Device, queue: &wgpu::Queue) -> anyhow::Result<Self> {
         Self::solid_color(device, queue, [255, 255, 255])
     }
 
     /// Color components must be in range 0-255
+    #[allow(unused)]
     pub fn solid_color(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -35,6 +37,7 @@ impl Texture {
         )
     }
 
+    #[allow(unused)]
     pub fn from_bytes(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
