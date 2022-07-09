@@ -1,16 +1,5 @@
 #![allow(clippy::type_complexity)]
 
-use crate::{
-    egui_plugin::EguiPlugin,
-    instances::Instances,
-    light::Light,
-    model::Model,
-    obj_loader::{LoadedObj, ObjLoaderPlugin},
-    renderer::plugin::WgpuRendererPlugin,
-    renderer::render_phase_3d::RenderPhase3dDescriptor,
-    renderer::WgpuRenderer,
-    transform::Transform,
-};
 use bevy::{
     app::AppExit,
     asset::AssetPlugin,
@@ -21,11 +10,24 @@ use bevy::{
     winit::WinitPlugin,
     MinimalPlugins,
 };
-use image_utils::image_from_color;
-use obj_loader::ObjBundle;
+
+use crate::{
+    egui_plugin::EguiPlugin,
+    gltf_loader::{GltfBundle, GltfLoaderPlugin},
+    image_utils::image_from_color,
+    instances::Instances,
+    light::Light,
+    model::Model,
+    obj_loader::{ObjBundle, ObjLoaderPlugin},
+    renderer::{
+        plugin::WgpuRendererPlugin, render_phase_3d::RenderPhase3dDescriptor, WgpuRenderer,
+    },
+    transform::Transform,
+};
 
 mod camera;
 mod egui_plugin;
+mod gltf_loader;
 mod image_utils;
 mod instances;
 mod light;
@@ -39,26 +41,31 @@ mod transform;
 
 const NUM_INSTANCES_PER_ROW: u32 = 6;
 const SPACE_BETWEEN: f32 = 3.0;
-const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
+const LIGHT_POSITION: Vec3 = const_vec3!([2.0, 2.0, 0.0]);
 
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
 // const MODEL_NAME: &str = "";
-// const INSTANCED_MODEL_NAME: &str = "";
+const INSTANCED_MODEL_NAME: &str = "";
+
+// const GLTF_MODEL_NAME: &str = "";
+// const GLTF_MODEL_NAME: &str = "sponza_gltf/Sponza.gltf";
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
-const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
+// const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
 // const MODEL_NAME: &str = "large_obj/bistro/Exterior/exterior.obj";
-const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
-
-// const MODEL_NAME: &str = "cube/cube.obj";
-// const MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
-// const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
+// const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 
 // const MODEL_NAME: &str = "bunny.obj";
 // const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 
-const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
+const GLTF_MODEL_NAME: &str = "learnopengl_cube_gltf/cube.gltf";
+// const GLTF_MODEL_NAME: &str = "sponza_gltf/Sponza.gltf";
+// const MODEL_NAME: &str = "cube/cube.obj";
+const MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
+const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
+
+// const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
 // const INSTANCED_MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
 const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
@@ -120,9 +127,11 @@ fn main() {
         .add_plugin(AssetPlugin)
         .add_plugin(ObjLoaderPlugin)
         .add_plugin(EguiPlugin)
+        .add_plugin(GltfLoaderPlugin)
         .add_startup_system(spawn_light)
         // .add_startup_system(spawn_shapes)
         .add_startup_system(spawn_obj_asset)
+        .add_startup_system(spawn_gltf)
         .add_system(update_window_title)
         .add_system(update_show_depth)
         // .add_system(cursor_moved)
@@ -273,6 +282,20 @@ fn spawn_obj_asset(mut commands: Commands, asset_server: Res<AssetServer>) {
         })
         .insert(Transform {
             scale: SCALE,
+            ..default()
+        });
+}
+
+fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
+    log::info!("Loading gltfs");
+
+    commands
+        .spawn_bundle(GltfBundle {
+            gltf: asset_server.load(GLTF_MODEL_NAME),
+        })
+        .insert(Transform {
+            scale: SCALE,
+            translation: Vec3::new(2.0, 0.0, 0.0),
             ..default()
         });
 }

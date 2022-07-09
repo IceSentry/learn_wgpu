@@ -131,6 +131,8 @@ pub fn create_material_uniform(
     query: Query<(Entity, &Model), (Added<Model>, Without<GpuModelMaterials>)>,
 ) {
     for (entity, model) in query.iter() {
+        log::info!("New model detected");
+
         let mut gpu_materials = vec![];
         for material in &model.materials {
             let uniform = MaterialUniform {
