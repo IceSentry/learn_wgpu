@@ -1,23 +1,21 @@
 use anyhow::Context;
 use bevy::{
-    asset::{AssetLoader, LoadedAsset},
+    asset::{AssetLoader, LoadContext, LoadedAsset},
     prelude::*,
     reflect::TypeUuid,
     tasks::IoTaskPool,
     utils::Instant,
 };
-use image::RgbaImage;
+use image::{DynamicImage, Rgba, RgbaImage};
 use std::{
     io::{BufReader, Cursor},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use crate::{
     instances::Instances, renderer::WgpuRenderer, resources, transform::Transform, Wave,
     INSTANCED_MODEL_NAME, INSTANCED_SCALE, MODEL_NAME, NUM_INSTANCES_PER_ROW, SCALE, SPACE_BETWEEN,
 };
-
-const ROOT_DIR: &str = "assets\\";
 
 // References:
 // <https://andrewnoske.com/wiki/OBJ_file_format>
@@ -89,11 +87,8 @@ impl AssetLoader for ObjLoader {
 
 async fn load_obj<'a, 'b>(
     bytes: &'a [u8],
-    load_context: &'a mut bevy::asset::LoadContext<'b>,
+    load_context: &'a LoadContext<'b>,
 ) -> anyhow::Result<LoadedObj> {
-    let path = load_context.path();
-    let asset_io = load_context.asset_io();
-
     let (obj_models, obj_materials) = tobj::load_obj_buf_async(
         &mut BufReader::new(Cursor::new(bytes)),
         &tobj::LoadOptions {
@@ -102,94 +97,33 @@ async fn load_obj<'a, 'b>(
             ..Default::default()
         },
         |mtl_path| async move {
-            log::info!("Loading {mtl_path:?}");
-            let mut path = path.parent().expect("no parent").to_path_buf();
-            path.push(mtl_path);
-            let material_file_data = asset_io
-                .load_path(&path)
-                .await
-                .unwrap_or_else(|_| panic!("Failed to load {path:?}"));
-            let mtl = tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(material_file_data)));
+            let path = load_context.path().parent().unwrap().join(mtl_path);
+            let mtl_bytes = load_context.read_asset_bytes(&path).await.unwrap();
+            let mtl = tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mtl_bytes)));
             log::info!("Finished loading {path:?}");
             mtl
         },
     )
     .await
-    .with_context(|| format!("Failed to load obj {path:?}"))?;
+    .with_context(|| format!("Failed to load obj {:?}", load_context.path()))?;
 
-    let mut tasks = Vec::new();
-    let pool = IoTaskPool::get();
-    let parent_path = load_context
-        .path()
-        .parent()
-        .expect("No parent found for load_context path")
-        .to_path_buf();
-
-    for obj_material in obj_materials.clone().expect("Failed to load materials") {
-        let parent_path = parent_path.clone();
-        let task = pool.spawn(async move {
-            let texture_path = if obj_material.diffuse_texture.is_empty() {
-                // default texture
-                Path::new("white.png").to_path_buf()
-            } else {
-                let mut texture_path = parent_path.clone();
-                texture_path.push(obj_material.diffuse_texture.clone());
-                texture_path
-            };
-            let texture = load_texture(texture_path.clone())
-                .with_context(|| format!("Failed to load texture {texture_path:?}"))
-                .unwrap();
-            log::info!("Finished loading {texture_path:?}");
-
-            let normal_texture = if !obj_material.normal_texture.is_empty() {
-                let mut texture_path = parent_path.clone();
-                texture_path.push(obj_material.normal_texture.clone());
-                let texture = load_texture(texture_path.clone())
-                    .with_context(|| format!("Failed to load texture {texture_path:?}"))
-                    .unwrap();
-                log::info!("Finished loading {texture_path:?}");
-                Some(texture)
-            } else {
-                None
-            };
-
-            let specular_texture = if !obj_material.specular_texture.is_empty() {
-                log::info!("SPECULAR {texture_path:?}");
-                let mut texture_path = parent_path.clone();
-                texture_path.push(obj_material.specular_texture.clone());
-                let texture = load_texture(texture_path.clone())
-                    .with_context(|| format!("Failed to load texture {texture_path:?}"))
-                    .unwrap();
-                log::info!("Finished loading {texture_path:?}");
-                Some(texture)
-            } else {
-                None
-            };
-
-            (obj_material, texture, normal_texture, specular_texture)
-        });
-        tasks.push(task);
-    }
-
-    let mut materials: Vec<ObjMaterial> = Vec::new();
-    for task in tasks {
-        let (obj_material, texture, normal_texture, specular_texture) = task.await;
-        materials.push(ObjMaterial {
-            name: obj_material.name.clone(),
-            base_color: Vec3::from(obj_material.diffuse).extend(obj_material.dissolve),
-            diffuse_texture: texture,
-            alpha: obj_material.dissolve,
-            gloss: obj_material.shininess,
-            specular: Vec3::from(obj_material.specular),
-            normal_texture,
-            specular_texture,
-        });
-        log::info!(
-            "Finished loading {} {:?}",
-            obj_material.name,
-            obj_material.dissolve
-        );
-    }
+    let obj_materials = obj_materials.expect("Failed to load materials");
+    let materials: Vec<ObjMaterial> = IoTaskPool::get()
+        .scope(|scope: &mut bevy::tasks::Scope<'_, anyhow::Result<_>>| {
+            obj_materials.iter().for_each(|obj_material| {
+                log::info!("Loading {}", obj_material.name);
+                scope.spawn(async move { load_material(load_context, obj_material).await });
+            });
+        })
+        .into_iter()
+        .filter_map(|res| {
+            if let Err(err) = res.as_ref() {
+                log::error!("Error while loading obj: {err}");
+            }
+            log::info!("Finished loading material: {}", res.as_ref().unwrap().name);
+            res.ok()
+        })
+        .collect();
 
     Ok(LoadedObj {
         models: obj_models,
@@ -197,12 +131,47 @@ async fn load_obj<'a, 'b>(
     })
 }
 
-fn load_texture(path: PathBuf) -> anyhow::Result<RgbaImage> {
-    let mut asset_path = Path::new(ROOT_DIR).to_path_buf();
-    asset_path.push(path);
-    let data = std::fs::read(asset_path)?;
-    let rgba = image::load_from_memory(&data)?.to_rgba8();
-    Ok(rgba)
+async fn load_material<'a>(
+    load_context: &LoadContext<'a>,
+    obj_material: &tobj::Material,
+) -> anyhow::Result<ObjMaterial> {
+    let diffuse_texture = load_texture(load_context, &obj_material.diffuse_texture)
+        .await?
+        .unwrap_or_else(|| {
+            let mut rgba = RgbaImage::new(1, 1);
+            rgba.put_pixel(0, 0, Rgba([255, 255, 255, 255]));
+            let rgba = DynamicImage::ImageRgba8(rgba).to_rgba8();
+            DynamicImage::ImageRgba8(rgba).to_rgba8()
+        });
+    let normal_texture = load_texture(load_context, &obj_material.normal_texture).await?;
+    let specular_texture = load_texture(load_context, &obj_material.specular_texture).await?;
+
+    Ok(ObjMaterial {
+        name: obj_material.name.clone(),
+        base_color: Vec3::from(obj_material.diffuse).extend(obj_material.dissolve),
+        diffuse_texture,
+        alpha: obj_material.dissolve,
+        gloss: obj_material.shininess,
+        specular: Vec3::from(obj_material.specular),
+        normal_texture,
+        specular_texture,
+    })
+}
+
+async fn load_texture<'a>(
+    load_context: &LoadContext<'a>,
+    texture_path: &str,
+) -> anyhow::Result<Option<RgbaImage>> {
+    Ok(if !texture_path.is_empty() {
+        let bytes = load_context
+            .read_asset_bytes(load_context.path().parent().unwrap().join(&texture_path))
+            .await?;
+        log::info!("Finished loading texture: {texture_path:?}");
+        let rgba = image::load_from_memory(&bytes)?.to_rgba8();
+        Some(rgba)
+    } else {
+        None
+    })
 }
 
 fn handle_obj_loaded(
