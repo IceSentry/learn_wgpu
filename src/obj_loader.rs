@@ -1,3 +1,7 @@
+use crate::{
+    mesh::Vertex,
+    model::{Material, Model, ModelMesh},
+};
 use anyhow::Context;
 use bevy::{
     asset::{AssetLoader, LoadContext, LoadedAsset},
@@ -6,15 +10,13 @@ use bevy::{
     tasks::IoTaskPool,
     utils::Instant,
 };
-use image::{DynamicImage, Rgba, RgbaImage};
-use std::{
-    io::{BufReader, Cursor},
-    path::Path,
-};
+use image::RgbaImage;
+use std::io::{BufReader, Cursor};
 
 use crate::{
-    instances::Instances, renderer::WgpuRenderer, resources, transform::Transform, Wave,
-    INSTANCED_MODEL_NAME, INSTANCED_SCALE, MODEL_NAME, NUM_INSTANCES_PER_ROW, SCALE, SPACE_BETWEEN,
+    image_utils::image_from_color, instances::Instances, renderer::WgpuRenderer,
+    transform::Transform, Wave, INSTANCED_MODEL_NAME, INSTANCED_SCALE, MODEL_NAME,
+    NUM_INSTANCES_PER_ROW, SCALE, SPACE_BETWEEN,
 };
 
 // References:
@@ -37,23 +39,11 @@ impl Plugin for ObjLoaderPlugin {
 #[derive(Default)]
 pub struct ObjLoader;
 
-#[derive(Debug)]
-pub struct ObjMaterial {
-    pub name: String,
-    pub base_color: Vec4,
-    pub alpha: f32,
-    pub gloss: f32,
-    pub specular: Vec3,
-    pub diffuse_texture: RgbaImage,
-    pub normal_texture: Option<RgbaImage>,
-    pub specular_texture: Option<RgbaImage>,
-}
-
 #[derive(Debug, TypeUuid)]
 #[uuid = "39cadc56-aa9c-4543-8640-a018b74b5052"]
 pub struct LoadedObj {
     pub models: Vec<tobj::Model>,
-    pub materials: Vec<ObjMaterial>,
+    pub materials: Vec<Material>,
 }
 
 impl AssetLoader for ObjLoader {
@@ -108,7 +98,7 @@ async fn load_obj<'a, 'b>(
     .with_context(|| format!("Failed to load obj {:?}", load_context.path()))?;
 
     let obj_materials = obj_materials.expect("Failed to load materials");
-    let materials: Vec<ObjMaterial> = IoTaskPool::get()
+    let materials: Vec<Material> = IoTaskPool::get()
         .scope(|scope: &mut bevy::tasks::Scope<'_, anyhow::Result<_>>| {
             obj_materials.iter().for_each(|obj_material| {
                 log::info!("Loading {}", obj_material.name);
@@ -134,19 +124,14 @@ async fn load_obj<'a, 'b>(
 async fn load_material<'a>(
     load_context: &LoadContext<'a>,
     obj_material: &tobj::Material,
-) -> anyhow::Result<ObjMaterial> {
+) -> anyhow::Result<Material> {
     let diffuse_texture = load_texture(load_context, &obj_material.diffuse_texture)
         .await?
-        .unwrap_or_else(|| {
-            let mut rgba = RgbaImage::new(1, 1);
-            rgba.put_pixel(0, 0, Rgba([255, 255, 255, 255]));
-            let rgba = DynamicImage::ImageRgba8(rgba).to_rgba8();
-            DynamicImage::ImageRgba8(rgba).to_rgba8()
-        });
+        .unwrap_or_else(|| image_from_color(Color::WHITE));
     let normal_texture = load_texture(load_context, &obj_material.normal_texture).await?;
     let specular_texture = load_texture(load_context, &obj_material.specular_texture).await?;
 
-    Ok(ObjMaterial {
+    Ok(Material {
         name: obj_material.name.clone(),
         base_color: Vec3::from(obj_material.diffuse).extend(obj_material.dissolve),
         diffuse_texture,
@@ -188,13 +173,11 @@ fn handle_obj_loaded(
 
     let LoadedObj { models, materials } = loaded_obj.unwrap();
 
-    let model = resources::load_model(
+    let model = generate_mesh(
         INSTANCED_MODEL_NAME,
-        Path::new(&INSTANCED_MODEL_NAME),
         models,
-        materials,
+        materials.clone(),
         &renderer.device,
-        &renderer.queue,
     )
     .expect("failed to load model from obj");
 
@@ -222,13 +205,11 @@ fn handle_instanced_obj_loaded(
 
     let LoadedObj { models, materials } = loaded_obj.unwrap();
 
-    let model = resources::load_model(
+    let model = generate_mesh(
         INSTANCED_MODEL_NAME,
-        Path::new(&INSTANCED_MODEL_NAME),
         models,
-        materials,
+        materials.clone(),
         &renderer.device,
-        &renderer.queue,
     )
     .expect("failed to load model from obj");
 
@@ -260,4 +241,72 @@ fn handle_instanced_obj_loaded(
         .insert(Wave::default());
 
     *mesh_spawned = true;
+}
+
+fn generate_mesh(
+    name: &str,
+    obj_models: &[tobj::Model],
+    materials: Vec<Material>,
+    device: &wgpu::Device,
+) -> anyhow::Result<Model> {
+    let start = Instant::now();
+    log::info!("Creating Mesh buffers");
+
+    let meshes: Vec<_> = obj_models
+        .iter()
+        .map(|m| {
+            let vertices: Vec<_> = (0..m.mesh.positions.len() / 3)
+                .map(|i| Vertex {
+                    position: Vec3::new(
+                        m.mesh.positions[i * 3],
+                        m.mesh.positions[i * 3 + 1],
+                        m.mesh.positions[i * 3 + 2],
+                    ),
+                    uv: if m.mesh.texcoords.is_empty() {
+                        Vec2::ZERO
+                    } else {
+                        // UVs are flipped
+                        Vec2::new(m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1])
+                    },
+                    normal: if m.mesh.normals.is_empty() {
+                        Vec3::ZERO
+                    } else {
+                        Vec3::new(
+                            m.mesh.normals[i * 3],
+                            m.mesh.normals[i * 3 + 1],
+                            m.mesh.normals[i * 3 + 2],
+                        )
+                    },
+                    tangent: Vec3::ZERO,
+                    bitangent: Vec3::ZERO,
+                })
+                .collect();
+
+            let mut mesh = crate::mesh::Mesh {
+                vertices,
+                indices: Some(m.mesh.indices.clone()),
+            };
+
+            if m.mesh.normals.is_empty() {
+                mesh.compute_normals();
+            }
+
+            mesh.compute_tangents();
+
+            ModelMesh {
+                name: name.to_string(),
+                vertex_buffer: mesh.get_vertex_buffer(device),
+                index_buffer: mesh.get_index_buffer(device),
+                num_elements: mesh.indices.unwrap().len() as u32,
+                material_id: m.mesh.material_id.unwrap_or(0),
+            }
+        })
+        .collect();
+
+    log::info!(
+        "Finished creating mesh buffers {}ms",
+        (Instant::now() - start).as_millis()
+    );
+
+    Ok(Model { meshes, materials })
 }

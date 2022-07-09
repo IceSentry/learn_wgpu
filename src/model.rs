@@ -1,8 +1,9 @@
-use crate::{mesh::Mesh, renderer::bind_groups::material::GpuModelMaterials, texture::Texture};
+use crate::{mesh::Mesh, renderer::bind_groups::material::GpuModelMaterials};
 use bevy::{
     math::{Vec3, Vec4},
     prelude::Component,
 };
+use image::RgbaImage;
 use std::ops::Range;
 
 #[derive(Component)]
@@ -61,16 +62,16 @@ impl Model {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Material {
     pub name: String,
     pub base_color: Vec4,
     pub alpha: f32,
     pub gloss: f32,
     pub specular: Vec3,
-    pub diffuse_texture: Texture,
-    pub normal_texture: Option<Texture>,
-    pub specular_texture: Option<Texture>,
+    pub diffuse_texture: RgbaImage,
+    pub normal_texture: Option<RgbaImage>,
+    pub specular_texture: Option<RgbaImage>,
 }
 
 #[derive(Debug)]

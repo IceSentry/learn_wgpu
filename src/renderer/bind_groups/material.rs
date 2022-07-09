@@ -8,10 +8,12 @@ use bevy::{
 };
 use wgpu::util::DeviceExt;
 
-use crate::{model::Model, renderer::WgpuRenderer, texture::Texture};
+use crate::{
+    image_utils::image_from_color, model::Model, renderer::WgpuRenderer, texture::Texture,
+};
 
 // TODO
-// this is temporary until a Meshes have handles to their material and
+// this is temporary until Meshes have handles to their material and
 // Models are just a list of Mesh handles
 #[derive(Component)]
 pub struct GpuModelMaterials {
@@ -155,16 +157,39 @@ pub fn create_material_uniform(
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
-            let default_white = Texture::default_white(&renderer.device, &renderer.queue)
-                .expect("Failed to generate default_white");
+            let diffuse_texture = Texture::from_image(
+                &renderer.device,
+                &renderer.queue,
+                &material.diffuse_texture,
+                Some(&format!("{}_diffuse_texture", material.name)),
+                None,
+            )
+            .unwrap();
 
-            let normal_texture = material.normal_texture.as_ref().unwrap_or(&default_white);
-            let specular_texture = material.specular_texture.as_ref().unwrap_or(&default_white);
+            let default_white = image_from_color(Color::WHITE);
+
+            let normal_texture = Texture::from_image(
+                &renderer.device,
+                &renderer.queue,
+                material.normal_texture.as_ref().unwrap_or(&default_white),
+                Some(&format!("{}_normal_texture", material.name)),
+                Some(wgpu::TextureFormat::Rgba8Unorm),
+            )
+            .unwrap();
+
+            let specular_texture = Texture::from_image(
+                &renderer.device,
+                &renderer.queue,
+                material.specular_texture.as_ref().unwrap_or(&default_white),
+                Some(&format!("{}_specular_texture", material.name)),
+                None,
+            )
+            .unwrap();
 
             let bind_group = renderer
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("material_bind_group"),
+                    label: Some(&format!("{}_material_bind_group", material.name)),
                     layout: &bind_group_layout(&renderer.device),
                     entries: &[
                         wgpu::BindGroupEntry {
@@ -174,15 +199,11 @@ pub fn create_material_uniform(
                         // diffuse
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::TextureView(
-                                &material.diffuse_texture.view,
-                            ),
+                            resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
-                            resource: wgpu::BindingResource::Sampler(
-                                &material.diffuse_texture.sampler,
-                            ),
+                            resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
                         },
                         // normal
                         wgpu::BindGroupEntry {

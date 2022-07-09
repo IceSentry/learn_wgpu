@@ -1,15 +1,3 @@
-use bevy::{
-    app::AppExit,
-    asset::AssetPlugin,
-    input::{Input, InputPlugin},
-    math::{const_vec3, Quat, Vec3},
-    prelude::*,
-    window::{CursorMoved, WindowDescriptor, WindowPlugin, Windows},
-    winit::WinitPlugin,
-    MinimalPlugins,
-};
-use texture::Texture;
-
 use crate::{
     egui_plugin::EguiPlugin,
     instances::Instances,
@@ -21,16 +9,27 @@ use crate::{
     renderer::WgpuRenderer,
     transform::Transform,
 };
+use bevy::{
+    app::AppExit,
+    asset::AssetPlugin,
+    input::{Input, InputPlugin},
+    math::{const_vec3, Quat, Vec3},
+    prelude::*,
+    window::{CursorMoved, WindowDescriptor, WindowPlugin, Windows},
+    winit::WinitPlugin,
+    MinimalPlugins,
+};
+use image_utils::image_from_color;
 
 mod camera;
 mod egui_plugin;
+mod image_utils;
 mod instances;
 mod light;
 mod mesh;
 mod model;
 mod obj_loader;
 mod renderer;
-mod resources;
 mod shapes;
 mod texture;
 mod transform;
@@ -149,6 +148,18 @@ fn spawn_light(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 }
 
 fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
+    let diffuse_texture_bytes =
+        std::fs::read("assets/rock_plane/Rock-Albedo.png").expect("failed to read rock_albedo");
+    let diffuse_texture = image::load_from_memory(&diffuse_texture_bytes)
+        .unwrap()
+        .to_rgba8();
+
+    let normal_texture_bytes =
+        std::fs::read("assets/rock_plane/Rock-Normal.png").expect("failed to read rock_albedo");
+    let normal_texture = image::load_from_memory(&normal_texture_bytes)
+        .unwrap()
+        .to_rgba8();
+
     let plane = Model {
         meshes: vec![shapes::plane::Plane {
             resolution: 1,
@@ -157,30 +168,12 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
         .mesh(&renderer.device)],
         materials: vec![model::Material {
             name: "rock_material".to_string(),
-            diffuse_texture: Texture::from_bytes(
-                &renderer.device,
-                &renderer.queue,
-                &std::fs::read("assets/rock_plane/Rock-Albedo.png")
-                    .expect("failed to read rock_albedo"),
-                "rock_albedo",
-                None,
-            )
-            .expect("failed to load rock albedo"),
+            diffuse_texture,
             alpha: 1.0,
             gloss: 1.0,
             specular: Vec3::new(1.0, 1.0, 1.0),
             base_color: Color::WHITE.as_rgba_f32().into(),
-            normal_texture: Some(
-                Texture::from_bytes(
-                    &renderer.device,
-                    &renderer.queue,
-                    &std::fs::read("assets/rock_plane/Rock-Normal.png")
-                        .expect("failed to read rock_albedo"),
-                    "rock_albedo",
-                    Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-                )
-                .expect("failed to load rock albedo"),
-            ),
+            normal_texture: Some(normal_texture),
             specular_texture: None,
         }],
     };
@@ -194,7 +187,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 
     let cube = Model {
         meshes: vec![shapes::cube::Cube::new(1.0, 1.0, 1.0).mesh(&renderer.device)],
-        materials: vec![get_default_material(&renderer, Color::WHITE)],
+        materials: vec![get_default_material(Color::WHITE)],
     };
     commands.spawn_bundle((
         cube,
@@ -206,7 +199,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 
     let sphere = Model {
         meshes: vec![shapes::sphere::UVSphere::default().mesh(&renderer.device)],
-        materials: vec![get_default_material(&renderer, Color::WHITE)],
+        materials: vec![get_default_material(Color::WHITE)],
     };
     commands.spawn_bundle((
         sphere,
@@ -218,7 +211,7 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
 
     let capsule = Model {
         meshes: vec![shapes::capsule::Capsule::default().mesh(&renderer.device)],
-        materials: vec![get_default_material(&renderer, Color::WHITE)],
+        materials: vec![get_default_material(Color::WHITE)],
     };
     commands.spawn_bundle((
         capsule,
@@ -229,12 +222,10 @@ fn spawn_shapes(mut commands: Commands, renderer: Res<WgpuRenderer>) {
     ));
 }
 
-fn get_default_material(renderer: &WgpuRenderer, base_color: Color) -> model::Material {
-    let default_texture = Texture::default_white(&renderer.device, &renderer.queue)
-        .expect("Failed to load white texture");
+fn get_default_material(base_color: Color) -> model::Material {
     model::Material {
         name: "default_material".to_string(),
-        diffuse_texture: default_texture,
+        diffuse_texture: image_from_color(Color::WHITE),
         alpha: 1.0,
         gloss: 1.0,
         specular: Vec3::new(1.0, 1.0, 1.0),
