@@ -161,7 +161,7 @@ async fn load_texture<'a>(
 
 fn handle_obj_loaded(
     mut commands: Commands,
-    obj_assets: ResMut<Assets<LoadedObj>>,
+    obj_assets: Res<Assets<LoadedObj>>,
     asset_server: Res<AssetServer>,
     renderer: Res<WgpuRenderer>,
     mut mesh_spawned: Local<bool>,
@@ -294,13 +294,7 @@ fn generate_mesh(
 
             mesh.compute_tangents();
 
-            ModelMesh {
-                name: name.to_string(),
-                vertex_buffer: mesh.get_vertex_buffer(device),
-                index_buffer: mesh.get_index_buffer(device),
-                num_elements: mesh.indices.unwrap().len() as u32,
-                material_id: m.mesh.material_id.unwrap_or(0),
-            }
+            ModelMesh::from_mesh(name, device, &mesh)
         })
         .collect();
 
