@@ -14,15 +14,18 @@ pub struct InstanceBuffer(pub wgpu::Buffer);
 pub struct Instances(pub Vec<Transform>);
 
 /// Creates the necessary IntanceBuffer on any Model created with a Model and a Transform or Instances
-#[allow(clippy::type_complexity)]
 pub fn create_instance_buffer(
     mut commands: Commands,
     renderer: Res<WgpuRenderer>,
     query: Query<
         (Entity, Option<&Transform>, Option<&Instances>),
         (
-            Or<(Added<Transform>, Added<Instances>)>,
-            With<Model>,
+            Or<(
+                (Added<Model>, With<Transform>),
+                (Added<Model>, With<Instances>),
+                (With<Model>, Added<Transform>),
+                (With<Model>, Added<Instances>),
+            )>,
             Without<InstanceBuffer>,
         ),
     >,
@@ -33,7 +36,8 @@ pub fn create_instance_buffer(
         } else if let Some(instances) = instances {
             instances.0.iter().map(Transform::to_raw).collect()
         } else {
-            unreachable!();
+            log::warn!("Trying to create instance buffer without Transform or Instances");
+            continue;
         };
 
         let instance_buffer =
