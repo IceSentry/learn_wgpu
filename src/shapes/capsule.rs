@@ -1,7 +1,9 @@
 use bevy::math::{Vec2, Vec3};
-use wgpu::util::DeviceExt;
 
-use crate::{mesh::Vertex, model::ModelMesh};
+use crate::{
+    mesh::{Mesh, Vertex},
+    model::ModelMesh,
+};
 
 /// A cylinder with hemispheres at the top and bottom
 #[derive(Debug, Copy, Clone)]
@@ -365,23 +367,15 @@ impl Capsule {
         assert_eq!(vertices.len(), vert_len);
         assert_eq!(indices.len(), fs_len);
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        ModelMesh {
-            name: "capsule".to_string(),
-            vertex_buffer,
-            index_buffer,
-            num_elements: indices.len() as u32,
-            material_id: 0,
-        }
+        ModelMesh::from_mesh(
+            "capsule",
+            device,
+            Mesh {
+                vertices,
+                indices: Some(indices),
+                material_id: None,
+            },
+            0,
+        )
     }
 }

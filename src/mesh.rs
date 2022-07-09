@@ -68,9 +68,11 @@ impl Vertex {
 }
 
 // TODO use Map for attributes
+#[derive(Debug)]
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Option<Vec<u32>>,
+    pub material_id: Option<usize>,
 }
 
 impl Mesh {

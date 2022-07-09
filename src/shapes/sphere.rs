@@ -94,6 +94,7 @@ impl UVSphere {
             Mesh {
                 vertices,
                 indices: Some(indices),
+                material_id: None,
             },
             0,
         )

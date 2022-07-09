@@ -285,6 +285,7 @@ fn generate_mesh(
             let mut mesh = crate::mesh::Mesh {
                 vertices,
                 indices: Some(m.mesh.indices.clone()),
+                material_id: m.mesh.material_id,
             };
 
             if m.mesh.normals.is_empty() {
