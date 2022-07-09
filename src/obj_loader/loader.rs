@@ -3,7 +3,7 @@ use bevy::{asset::LoadContext, prelude::*, tasks::IoTaskPool};
 use image::RgbaImage;
 use std::io::{BufReader, Cursor};
 
-use crate::{image_utils::image_from_color, model::Material};
+use crate::{image_utils::image_from_color, mesh::Mesh, mesh::Vertex, model::Material};
 
 use super::LoadedObj;
 
@@ -29,9 +29,9 @@ pub async fn load_obj<'a, 'b>(
     .await
     .with_context(|| format!("Failed to load obj {:?}", load_context.path()))?;
 
-    let obj_materials = obj_materials.expect("Failed to load materials");
+    let obj_materials = obj_materials?;
     let materials: Vec<Material> = IoTaskPool::get()
-        .scope(|scope: &mut bevy::tasks::Scope<'_, anyhow::Result<_>>| {
+        .scope(|scope| {
             obj_materials.iter().for_each(|obj_material| {
                 log::info!("Loading {}", obj_material.name);
                 scope.spawn(async move { load_material(load_context, obj_material).await });
@@ -40,17 +40,16 @@ pub async fn load_obj<'a, 'b>(
         .into_iter()
         .filter_map(|res| {
             if let Err(err) = res.as_ref() {
-                log::error!("Error while loading obj: {err}");
+                log::error!("Error while loading obj materials: {err}");
             }
             log::info!("Finished loading material: {}", res.as_ref().unwrap().name);
             res.ok()
         })
         .collect();
 
-    Ok(LoadedObj {
-        models: obj_models,
-        materials,
-    })
+    let meshes = generate_mesh(&obj_models, &materials);
+
+    Ok(LoadedObj { materials, meshes })
 }
 
 async fn load_material<'a>(
@@ -89,4 +88,58 @@ async fn load_texture<'a>(
     } else {
         None
     })
+}
+
+fn generate_mesh(obj_models: &[tobj::Model], materials: &[Material]) -> Vec<Mesh> {
+    obj_models
+        .iter()
+        .map(|m| {
+            let vertices: Vec<_> = (0..m.mesh.positions.len() / 3)
+                .map(|i| Vertex {
+                    position: Vec3::new(
+                        m.mesh.positions[i * 3],
+                        m.mesh.positions[i * 3 + 1],
+                        m.mesh.positions[i * 3 + 2],
+                    ),
+                    uv: if m.mesh.texcoords.is_empty() {
+                        Vec2::ZERO
+                    } else {
+                        // UVs are flipped
+                        Vec2::new(m.mesh.texcoords[i * 2], 1.0 - m.mesh.texcoords[i * 2 + 1])
+                    },
+                    normal: if m.mesh.normals.is_empty() {
+                        Vec3::ZERO
+                    } else {
+                        Vec3::new(
+                            m.mesh.normals[i * 3],
+                            m.mesh.normals[i * 3 + 1],
+                            m.mesh.normals[i * 3 + 2],
+                        )
+                    },
+                    tangent: Vec3::ZERO,
+                    bitangent: Vec3::ZERO,
+                })
+                .collect();
+
+            let mut mesh = crate::mesh::Mesh {
+                vertices,
+                indices: Some(m.mesh.indices.clone()),
+                material_id: m.mesh.material_id,
+            };
+
+            if m.mesh.normals.is_empty() {
+                mesh.compute_normals();
+            }
+            if !m.mesh.normals.is_empty()
+                && m.mesh
+                    .material_id
+                    .and_then(|m_id| materials[m_id].normal_texture.clone())
+                    .is_some()
+            {
+                mesh.compute_tangents();
+            }
+
+            mesh
+        })
+        .collect()
 }

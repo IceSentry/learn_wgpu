@@ -22,6 +22,7 @@ use bevy::{
     MinimalPlugins,
 };
 use image_utils::image_from_color;
+use obj_loader::ObjBundle;
 
 mod camera;
 mod egui_plugin;
@@ -43,7 +44,7 @@ const LIGHT_POSITION: Vec3 = const_vec3!([5.0, 3.0, 0.0]);
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
 // const MODEL_NAME: &str = "";
-const INSTANCED_MODEL_NAME: &str = "";
+// const INSTANCED_MODEL_NAME: &str = "";
 
 // const MODEL_NAME: &str = "teapot/teapot.obj";
 const MODEL_NAME: &str = "large_obj/sponza_obj/sponza.obj";
@@ -57,7 +58,7 @@ const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 // const MODEL_NAME: &str = "bunny.obj";
 // const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 
-// const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
+const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
 // const INSTANCED_MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
 const INSTANCED_SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
@@ -121,7 +122,7 @@ fn main() {
         .add_plugin(EguiPlugin)
         .add_startup_system(spawn_light)
         // .add_startup_system(spawn_shapes)
-        .add_startup_system(load_obj_asset)
+        .add_startup_system(spawn_obj_asset)
         .add_system(update_window_title)
         .add_system(update_show_depth)
         // .add_system(cursor_moved)
@@ -237,9 +238,43 @@ fn get_default_material(base_color: Color) -> model::Material {
     }
 }
 
-fn load_obj_asset(asset_server: Res<AssetServer>) {
-    let _: Handle<LoadedObj> = asset_server.load(INSTANCED_MODEL_NAME);
-    let _: Handle<LoadedObj> = asset_server.load(MODEL_NAME);
+fn spawn_obj_asset(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let mut instances = Vec::new();
+    for z in 0..=NUM_INSTANCES_PER_ROW {
+        for x in 0..=NUM_INSTANCES_PER_ROW {
+            let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+            let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+
+            let translation = Vec3::new(x as f32, 0.0, z as f32);
+            let rotation = if translation == Vec3::ZERO {
+                Quat::from_axis_angle(Vec3::Y, 0.0)
+            } else {
+                Quat::from_axis_angle(translation.normalize(), std::f32::consts::FRAC_PI_4)
+            };
+
+            instances.push(Transform {
+                rotation,
+                translation,
+                scale: INSTANCED_SCALE,
+            });
+        }
+    }
+
+    commands
+        .spawn_bundle(ObjBundle {
+            obj: asset_server.load(INSTANCED_MODEL_NAME),
+        })
+        .insert(Instances(instances))
+        .insert(Wave::default());
+
+    commands
+        .spawn_bundle(ObjBundle {
+            obj: asset_server.load(MODEL_NAME),
+        })
+        .insert(Transform {
+            scale: SCALE,
+            ..default()
+        });
 }
 
 fn update_window_title(time: Res<Time>, mut windows: ResMut<Windows>) {
