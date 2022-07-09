@@ -1,3 +1,5 @@
 /target
-/assets/large_obj
 /egui.ron
+/assets/large_obj
+/assets/sponza_gltf
+/assets/learnopengl_cube_gltf
