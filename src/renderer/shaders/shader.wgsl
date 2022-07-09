@@ -152,7 +152,8 @@ fn vertex(
 [[stage(fragment)]]
 fn fragment(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let object_color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.uv);
-    let object_specular: vec4<f32> = textureSample(t_spec, s_spec, in.uv);
+    var object_specular: vec4<f32> = textureSample(t_spec, s_spec, in.uv);
+    object_specular = vec4<f32>(1.0, 1.0, 1.0, 1.0) - object_specular;
 
     var N: vec3<f32>;
     var L: vec3<f32>;
