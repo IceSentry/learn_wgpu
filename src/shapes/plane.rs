@@ -66,12 +66,11 @@ impl Plane {
         ModelMesh::from_mesh(
             "capsule",
             device,
-            Mesh {
+            &Mesh {
                 vertices,
                 indices: Some(indices),
                 material_id: None,
             },
-            0,
         )
     }
 }

@@ -1,5 +1,4 @@
 use bevy::math::{Vec2, Vec3};
-use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -76,26 +75,6 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn get_vertex_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&self.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        })
-    }
-
-    pub fn get_index_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(
-                self.indices
-                    .as_ref()
-                    .expect("tried to get index buffer without indices"),
-            ),
-            usage: wgpu::BufferUsages::INDEX,
-        })
-    }
-
     pub fn compute_normals(&mut self) {
         fn face_normal(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> [f32; 3] {
             let (a, b, c) = (Vec3::from(a), Vec3::from(b), Vec3::from(c));

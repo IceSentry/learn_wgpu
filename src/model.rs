@@ -5,6 +5,7 @@ use bevy::{
 };
 use image::RgbaImage;
 use std::ops::Range;
+use wgpu::util::DeviceExt;
 
 #[derive(Component)]
 pub struct Model {
@@ -39,7 +40,8 @@ impl Model {
     ) {
         for mesh in &self.meshes {
             // TODO get data from Handle
-            let material = &gpu_materials.data[mesh.material_id];
+            // TODO handle material_id == None
+            let material = &gpu_materials.data[mesh.material_id.unwrap_or(0)];
 
             if transparent && material.0.alpha < 1.0 {
                 mesh.draw_instanced(
@@ -81,20 +83,33 @@ pub struct ModelMesh {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
-    pub material_id: usize,
+    pub material_id: Option<usize>,
 }
 
 impl ModelMesh {
-    pub fn from_mesh(label: &str, device: &wgpu::Device, mesh: Mesh, material_id: usize) -> Self {
-        let mut mesh = mesh;
-        mesh.compute_tangents();
+    pub fn from_mesh(label: &str, device: &wgpu::Device, mesh: &Mesh) -> Self {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{label} vertex buffer")),
+            contents: bytemuck::cast_slice(&mesh.vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{label} index buffer")),
+            contents: bytemuck::cast_slice(
+                mesh.indices
+                    .as_ref()
+                    .expect("tried to get index buffer without indices"),
+            ),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
         ModelMesh {
             name: label.to_string(),
-            vertex_buffer: mesh.get_vertex_buffer(device),
-            index_buffer: mesh.get_index_buffer(device),
-            num_elements: mesh.indices.map(|i| i.len() as u32).unwrap_or(1),
-            material_id,
+            vertex_buffer,
+            index_buffer,
+            num_elements: mesh.indices.clone().map(|i| i.len() as u32).unwrap_or(1),
+            material_id: mesh.material_id,
         }
     }
 

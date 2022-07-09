@@ -91,12 +91,11 @@ impl UVSphere {
         ModelMesh::from_mesh(
             "uv_sphere",
             device,
-            Mesh {
+            &Mesh {
                 vertices,
                 indices: Some(indices),
                 material_id: None,
             },
-            0,
         )
     }
 }

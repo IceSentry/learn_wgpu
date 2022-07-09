@@ -126,12 +126,11 @@ impl Cylinder {
         ModelMesh::from_mesh(
             "cylinder",
             device,
-            Mesh {
+            &Mesh {
                 vertices,
                 indices: Some(indices),
                 material_id: None,
             },
-            0,
         )
     }
 }
