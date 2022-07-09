@@ -45,7 +45,7 @@ const LIGHT_POSITION: Vec3 = const_vec3!([2.0, 2.0, 0.0]);
 
 const CAMERRA_EYE: Vec3 = const_vec3!([0.0, 5.0, 8.0]);
 
-// const MODEL_NAME: &str = "";
+const MODEL_NAME: &str = "";
 const INSTANCED_MODEL_NAME: &str = "";
 
 // const GLTF_MODEL_NAME: &str = "";
@@ -56,14 +56,15 @@ const INSTANCED_MODEL_NAME: &str = "";
 // const MODEL_NAME: &str = "large_obj/bistro/Exterior/exterior.obj";
 // const SCALE: Vec3 = const_vec3!([0.05, 0.05, 0.05]);
 
+const GLTF_MODEL_NAME: &str = "FlightHelmet/FlightHelmet.gltf";
 // const MODEL_NAME: &str = "bunny.obj";
-// const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
+const SCALE: Vec3 = const_vec3!([1.5, 1.5, 1.5]);
 
-const GLTF_MODEL_NAME: &str = "learnopengl_cube_gltf/cube.gltf";
+// const GLTF_MODEL_NAME: &str = "learnopengl_cube_gltf/cube.gltf";
 // const GLTF_MODEL_NAME: &str = "sponza_gltf/Sponza.gltf";
 // const MODEL_NAME: &str = "cube/cube.obj";
-const MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
-const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
+// const MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
+// const SCALE: Vec3 = const_vec3!([1.0, 1.0, 1.0]);
 
 // const INSTANCED_MODEL_NAME: &str = "cube/cube.obj";
 // const INSTANCED_MODEL_NAME: &str = "learn_opengl/container2/cube.obj";
@@ -295,7 +296,7 @@ fn spawn_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
         })
         .insert(Transform {
             scale: SCALE,
-            translation: Vec3::new(2.0, 0.0, 0.0),
+            // translation: Vec3::new(2.0, 0.0, 0.0),
             ..default()
         });
 }
